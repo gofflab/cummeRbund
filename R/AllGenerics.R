@@ -20,6 +20,7 @@ setGeneric("splicing",function(object) standardGeneric("splicing"))
 setGeneric("relCDS",function(object) standardGeneric("relCDS"))
 setGeneric("getGene",function(object,geneId,sampleIdList=NULL) standardGeneric("getGene"))
 setGeneric("getGenes",function(object,geneIdList,sampleIdList=NULL) standardGeneric("getGenes"))
+setGeneric("getSig", function(object,x,y,level="genes",testTable=FALSE) standardGeneric("getSig"))
 setGeneric("addFeatures",function(object, features, ...) standardGeneric("addFeatures"))
 setGeneric("findSimilar",function(object,x,n) standardGeneric("findSimilar"))
 
@@ -40,11 +41,11 @@ setGeneric("getLevels",function(object) standardGeneric("getLevels"))
 
 
 #CuffDist generics
-setGeneric("distValues",function(object,...) standardGeneric("distValues"))
+setGeneric("distValues",function(object, x, y,...) standardGeneric("distValues"))
 setGeneric("DB",function(object,...) standardGeneric("DB"))
 #setGeneric("table",function(object,...) standardGeneric("table"))
 setGeneric("type",function(object,...) standardGeneric("type"))
-setGeneric("testId",function(object,...) standardGeneric("testId"))
+#setGeneric("testId",function(object,...) standardGeneric("testId"))
 
 #CuffData plotting
 setGeneric("csDensity",function(object, logMode=TRUE, pseudocount=1.0, labels, features=FALSE, ...) standardGeneric("csDensity"))
@@ -63,6 +64,7 @@ setGeneric("csBoxplot",function(object, logMode=T, ...) standardGeneric("csBoxpl
 #################
 setGeneric("csHeatmap",function(object,rescaling='none', clustering='none', labCol=T, labRow=T, logMode=T, pseudocount=1.0, border=FALSE, heatscale= c(low='darkred',mid='orange',high='white'), heatMidpoint=NULL, ...) standardGeneric("csHeatmap"))
 setGeneric("csCluster",function(object, k, iter.max=100, ...) standardGeneric("csCluster"))
+#setGeneric("csClusterPlot",function(clustering, pseudocount=1.0) standardGeneric("csClusterPlot"))
 #setGeneric("diff",function(object) standardGeneric("diff"))
 setGeneric("annotation",function(object) standardGeneric("annotation"))
 

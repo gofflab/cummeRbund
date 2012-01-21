@@ -1,5 +1,7 @@
 import(methods)
 
+#importFrom(graphics, plot)
+
 exportClasses(CuffSet,
 			CuffData,
 			CuffDist,
@@ -35,6 +37,7 @@ exportMethods(
 			expressionBarplot,
 			getGene,
 			getGenes,
+			getSig,
 			addFeatures,
 			getLevels,
 			findSimilar
@@ -45,7 +48,8 @@ export("readCufflinks",
 		"JSdistVec",
 		"shannon.entropy",
 		"makeprobs",
-		"makeprobsvec"
+		"makeprobsvec",
+		"csClusterPlot"
 		)
 
 #importClassesFrom("Biobase","Versioned")

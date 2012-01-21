@@ -1,3 +1,29 @@
+v1.1.1
+	Bugfixes:
+		- fixed issue in which there was no graceful error handling of missing CDS or TSS data in cuffdiff output.
+		- Fixed issue in which distribution test data (promoters, splicing, relCDS) were not appropriately added to objects on creation.
+		- Fixed bug that would sometimes cause csBoxplot() to throw an error when log-transforming fpkm data. Also added pseudocount argument.
+		- Fixed bug that would cause diffData() to return a filtered subset of results by default.
+		- Adjusted indexing of tables to improve performance on large datasets.
+		- Fixed bug that caused diffData method to not be registered with CuffFeature and CuffGene objects.
+		
+	New Features:	
+		- added getSig method to CuffSet class for rapid retrieval of significant features from all pairwise tests (as a list of IDs). 
+		By default the level is 'genes' but any feature level can be queried.
+		- csCluster now uses Jensen-Shannon distance by default (as opposed to Euclidean)
+		- Added 'xlimits' argument to csVolcano to constrain plot dimensions.
+		- Enforced requirement in csVolcano for x and y arguments (as sample names).
+	
+	Notes:
+		- Changed dependency 'reshape' to 'reshape2'
+		- Changed the default orientation of expressionBarplot() for CuffFeatureSet objects.
+		- Changed output of csCluster to a list format that includes clustering information. As a result, I created the function csClusterPlot
+		to replace the previous default drawing behavior of csCluster.  This allows for stable cluster analysis.
+		- For consistency, the 'testId' slot for CuffDist objects was renamed to 'idField'.  This brings the CuffDist class in line with the CuffData class.
+		- CuffGene and CuffGeneSet now include slots for promoter, splicing, and relCDS distribution test results.
+v1.0.0
+	- Official public release. No changes from v0.99.5
+
 v0.99.5
 	- Significant speed improvements to readCufflinks() for large cuffdiff datasets.
 		- Tables written first then indexed.

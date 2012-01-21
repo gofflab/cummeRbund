@@ -123,7 +123,8 @@ setMethod("fpkmMatrix","CuffData",.fpkmMatrix)
 
 
 #This needs a lot of work...
-.diffData<-function(object,x,y,features=FALSE,lnFcCutoff=20){
+#TODO: Change this to remove lnFcCutoff but make sure that functions that rely on diffData have their own FC cutoff so that plotting doesn't suffer
+.diffData<-function(object,x,y,features=FALSE){
 	if(missing(x) && missing(y)){
 		if(!features){
 			diffQuery<-paste("SELECT * FROM ",object@tables$expDiffTable,sep="")
@@ -134,9 +135,9 @@ setMethod("fpkmMatrix","CuffData",.fpkmMatrix)
 		stop("You must supply both x and y or neither.")
 	}else{
 		if(!features){
-			diffQuery<-paste("SELECT x.",object@idField,", xed.* FROM ",object@tables$mainTable," x LEFT JOIN ",object@tables$expDiffTable," xed on x.",object@idField," = xed.",object@idField," WHERE ((sample_1 = '",x,"' AND sample_2 = '",y,"') OR (sample_1 = '",y,"' AND sample_2 = '",x,"')) AND xed.ln_fold_change>",-lnFcCutoff," AND xed.ln_fold_change<",lnFcCutoff,sep="")
+			diffQuery<-paste("SELECT x.",object@idField,", xed.* FROM ",object@tables$mainTable," x LEFT JOIN ",object@tables$expDiffTable," xed on x.",object@idField," = xed.",object@idField," WHERE ((sample_1 = '",x,"' AND sample_2 = '",y,"') OR (sample_1 = '",y,"' AND sample_2 = '",x,"'))",sep="")
 		}else{
-			diffQuery<-paste("SELECT x.",object@idField,", xed.*, xf.* FROM ",object@tables$mainTable," x LEFT JOIN ",object@tables$expDiffTable," xed on x.",object@idField," = xed.",object@idField," LEFT JOIN ",object@tables$featureTable," xf ON x.",object@idField,"=xf.",object@idField," WHERE ((sample_1 = '",x,"' AND sample_2 = '",y,"') OR (sample_1 = '",y,"' AND sample_2 = '",x,"')) AND xed.ln_fold_change>",-lnFcCutoff," AND xed.ln_fold_change<",lnFcCutoff,sep="")
+			diffQuery<-paste("SELECT x.",object@idField,", xed.*, xf.* FROM ",object@tables$mainTable," x LEFT JOIN ",object@tables$expDiffTable," xed on x.",object@idField," = xed.",object@idField," LEFT JOIN ",object@tables$featureTable," xf ON x.",object@idField,"=xf.",object@idField," WHERE ((sample_1 = '",x,"' AND sample_2 = '",y,"') OR (sample_1 = '",y,"' AND sample_2 = '",x,"'))",sep="")
 		}
 	}
 	dat<-dbGetQuery(object@DB,diffQuery)
@@ -223,7 +224,7 @@ setMethod("getLevels",signature(object="CuffData"),.getLevels)
 
 setMethod("csDensity",signature(object="CuffData"),.density)
 
-.scatter<-function(object,x,y,logMode=TRUE,pseudocount=1.0,labels,smooth=FALSE,colorByStatus=FALSE,...){
+.scatter<-function(object,x,y,logMode=TRUE,pseudocount=1.0,labels,smooth=FALSE,colorByStatus=FALSE, drawRug=TRUE, ...){
 	dat<-fpkmMatrix(object)
 	samp<-samples(object)
 	
@@ -242,7 +243,20 @@ setMethod("csDensity",signature(object="CuffData"),.density)
 	#make plot object
 	p<-ggplot(dat)
 	p<- p + aes_string(x=x,y=y)
-	p<- p + geom_point(size=1.2,alpha=I(1/3)) + geom_abline(intercept=0,slope=1,linetype=2) + geom_rug(size=0.5,alpha=0.01)
+	
+	#Right now, this does nothing, because 'significant' is not returned from fpkmMatrix object so I don't have this as a feature to draw
+	if(colorByStatus){
+		p<- p + geom_point(size=1.2,alpha=I(1/3))
+	}else{
+		p<- p + geom_point(size=1.2,alpha=I(1/3))
+	}
+	#Add symmetry line
+	p<- p + geom_abline(intercept=0,slope=1,linetype=2) 
+	
+	#Add rug
+	if(drawRug){
+		p<- p + geom_rug(size=0.5,alpha=0.01)
+	}
 	
 	#add smoother
 	if(smooth){
@@ -271,8 +285,19 @@ setMethod("csDensity",signature(object="CuffData"),.density)
 
 setMethod("csScatter",signature(object="CuffData"), .scatter)
 
-.volcano<-function(object,x,y,features=FALSE,...){
-	dat<-diffData(object=object,x=x,y=y,features=features)
+.volcano<-function(object,x,y,features=FALSE,xlimits=c(-20,20),...){
+	samp<-samples(object)
+	
+	#check to make sure x and y are in samples
+	if (!all(c(x,y) %in% samp)){
+		stop("One or more values of 'x' or 'y' are not valid sample names!")
+	}
+	
+	dat<-diffData(object=object,features=features)
+	
+	#subset dat for samples of interest
+	mySamples<-c(x,y)
+	dat<-dat[(dat$sample_1 %in% mySamples & dat$sample_2 %in% mySamples),]
 	s1<-unique(dat$sample_1)
 	s2<-unique(dat$sample_2)
 	
@@ -283,20 +308,24 @@ setMethod("csScatter",signature(object="CuffData"), .scatter)
 	p<- p + opts(title=paste(object@tables$mainTable,": ",s2,"/",s1,sep=""))
 	p<- p + scale_colour_manual(values=c("red", "steelblue"))
 	
+	#Set axis limits
+	p<- p + scale_x_continuous(limits=xlimits)
+	
 	p <- p + xlab(bquote(paste(log[2],"(fold change)",sep=""))) + 
 	    ylab(bquote(paste(-log[10],"(p value)",sep="")))
-	
 	p
 }
 
 setMethod("csVolcano",signature(object="CuffData"), .volcano)
 
-.boxplot<-function(object,logMode=TRUE,...){
+.boxplot<-function(object,logMode=TRUE,pseudocount=0.0001,...){
 	dat<-fpkm(object)
-	p <- ggplot(dat)
 	if(logMode) {
-		p<-p+geom_boxplot(aes(x=sample_name,y= log10(fpkm),fill=sample_name),size=0.3,alpha=I(1/3))
+		dat$fpkm<-dat$fpkm+pseudocount
+		p<-ggplot(dat)
+		p<-p+geom_boxplot(aes(x=sample_name,y=log10(fpkm),fill=sample_name),size=0.3,alpha=I(1/3))
 	} else {
+		p <- ggplot(dat)
 		p<-p+geom_boxplot(aes(x=sample_name,y=fpkm,fill=sample_name),alpha=I(1/3),size=0.3)
 	}
 	p<- p + opts(axis.text.x=theme_text(angle=-90, hjust=0))

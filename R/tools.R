@@ -5,20 +5,25 @@
 
 JSdist<-function(mat){
 	res<-matrix(0,ncol=dim(mat)[2],nrow=dim(mat)[2])
+	
+	col_js <- matrix(0,ncol=dim(mat)[2],nrow=1)
+	for(i in 1:dim(mat)[2]){
+	    col_js[,i] <- shannon.entropy(mat[,i])
+    }
+    #print(col_js)
 	colnames(res)<-colnames(mat)
 	rownames(res)<-colnames(mat)
 	for(i in 1:dim(mat)[2]){
 		for(j in i:dim(mat)[2]){
 			a<-mat[,i]
 			b<-mat[,j]
-			JSdiv<-shannon.entropy((a+b)/2)-(shannon.entropy(a)+shannon.entropy(b))*0.5
+			JSdiv<-shannon.entropy((a+b)/2)-(col_js[,i]+col_js[,j])*0.5
 			res[i,j] = sqrt(JSdiv)
 			res[j,i] = sqrt(JSdiv)
 		}
 	}
 	as.dist(res)
 }
-
 
 JSdistVec<-function(p,q){
 	JSdiv<-shannon.entropy((p+q)/2)-(shannon.entropy(p)+shannon.entropy(q))*0.5
@@ -46,6 +51,44 @@ makeprobs<-function(a){
 	b
 }
 
+#Intersection of a list of vectors
+#intersect2 <- function(...) {
+#	
+#	args <- list(...) 
+#	nargs <- length(args) 
+#	if(nargs <= 1) {
+#		
+#		if(nargs == 1 && is.list(args[[1]])) {
+#			do.call("intersect2", args[[1]])
+#		} else {
+#			stop("cannot evaluate intersection fewer than 2 arguments")
+#		}
+#	} else if(nargs == 2) {
+#		intersect(args[[1]], args[[2]])
+#	} else {
+#		intersect(args[[1]], intersect2(args[-1]))
+#	} 
+#}
+
+#Union of a list of vectors
+#union2 <- function(...) {
+#	
+#	args <- list(...) 
+#	nargs <- length(args) 
+#	if(nargs <= 1) {
+#		
+#		if(nargs == 1 && is.list(args[[1]])) {
+#			do.call("union2", args[[1]])
+#		} else {
+#			stop("cannot evaluate intersection fewer than 2 arguments")
+#		}
+#	} else if(nargs == 2) {
+#		union(args[[1]], args[[2]])
+#	} else {
+#		union(args[[1]], union2(args[-1]))
+#	} 
+#}
+
 
 #THIS IS NOT MINE....I MUST REMOVE IT PRIOR TO SUBMISSION (For detailed GO analysis, check out clusterProfiler and goProfiles)
 #ClusterProfiles <- function(geneClusters, onto="CC", level=3, orgPackage="org.Hs.eg.db") {
@@ -71,6 +114,3 @@ makeprobs<-function(a){
 #	result <- list(data=clusterProfile.df, p=p)
 #	return(result)
 #}
-
-
-

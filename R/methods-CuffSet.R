@@ -261,11 +261,21 @@ setMethod("getGene",signature(object="CuffSet"),.getGene)
 	idString<-paste(idString,")",sep="")
 	
 	whereStringGene<-paste('WHERE (x.gene_id IN ',idString,' OR x.gene_short_name IN ',idString,')',sep="")
-	whereStringGeneFPKM<-paste('WHERE (x.gene_id IN ',idString,' OR x.gene_short_name IN ',idString,') AND y.sample_name IN ',sampleString,sep="")
-	whereStringGeneDiff<-paste('WHERE (x.gene_id IN ',idString,' OR x.gene_short_name IN ',idString,') AND (y.sample_1 IN ',sampleString,' AND y.sample_2 IN ',sampleString,')',sep="")
+	whereStringGeneFPKM<-paste('WHERE (x.gene_id IN ',idString,' OR x.gene_short_name IN ',idString,')',sep="")
+	whereStringGeneDiff<-paste('WHERE (x.gene_id IN ',idString,' OR x.gene_short_name IN ',idString,')',sep="")
 	whereString<-paste('WHERE (x.gene_id IN ',idString,' OR g.gene_short_name IN ',idString,')',sep="")
-	whereStringFPKM<-paste('WHERE (x.gene_id IN ',idString,' OR g.gene_short_name IN ',idString,') AND y.sample_name IN ',sampleString,sep="")
-	whereStringDiff<-paste('WHERE (x.gene_id IN ',idString,' OR g.gene_short_name IN ',idString,') AND (y.sample_1 IN ',sampleString,' AND y.sample_2 IN ',sampleString,')',sep="")
+	whereStringFPKM<-paste('WHERE (x.gene_id IN ',idString,' OR g.gene_short_name IN ',idString,')',sep="")
+	whereStringDiff<-paste('WHERE (x.gene_id IN ',idString,' OR g.gene_short_name IN ',idString,')',sep="")
+	
+	if(!is.null(sampleIdList)){
+		whereStringGene<-whereStringGene
+		whereStringGeneFPKM<-paste(whereStringGeneFPKM,' AND y.sample_name IN ',sampleString,sep="")
+		whereStringGeneDiff<-paste(whereStringGeneDiff,' AND (y.sample_1 IN ',sampleString,' AND y.sample_2 IN ',sampleString,')',sep="")
+		whereString<-whereString
+		whereStringFPKM<-paste(whereStringFPKM, ' AND y.sample_name IN ',sampleString,sep="")
+		whereStringDiff<-paste(whereStringDiff,' AND (y.sample_1 IN ',sampleString,' AND y.sample_2 IN ',sampleString,')',sep="")
+		
+	}
 	
 	#dbQueries
 	idQuery<-paste("SELECT DISTINCT gene_id from genes x ",whereStringGene,sep="")
@@ -274,69 +284,131 @@ setMethod("getGene",signature(object="CuffSet"),.getGene)
 	geneFPKMQuery<-paste("SELECT y.* from genes x JOIN geneData y ON x.gene_id=y.gene_id ", whereStringGeneFPKM,sep="")
 	geneDiffQuery<-paste("SELECT y.* from genes x JOIN geneExpDiffData y ON x.gene_id=y.gene_id ", whereStringGeneDiff,sep="")
 	
-	isoformAnnotationQuery<-paste("SELECT * from isoforms x JOIN genes g on x.gene_id=g.gene_id ", whereString,sep="")
+	isoformAnnotationQuery<-paste("SELECT x.* from isoforms x LEFT JOIN isoformFeatures xf ON x.isoform_id=xf.isoform_id JOIN genes g on x.gene_id=g.gene_id ", whereString,sep="")
 	isoformFPKMQuery<-paste("SELECT y.* from isoforms x JOIN isoformData y ON x.isoform_id = y.isoform_id JOIN genes g on x.gene_id=g.gene_id ", whereStringFPKM,sep="")
 	isoformDiffQuery<-paste("SELECT y.* from isoforms x JOIN isoformExpDiffData y ON x.isoform_id = y.isoform_id JOIN genes g on x.gene_id=g.gene_id ", whereStringDiff,sep="")
 	
-	TSSAnnotationQuery<-paste("SELECT * from TSS x JOIN genes g on x.gene_id=g.gene_id ", whereString,sep="")
+	TSSAnnotationQuery<-paste("SELECT x.* from TSS x LEFT JOIN TSSFeatures xf ON x.TSS_group_id=xf.TSS_group_id JOIN genes g on x.gene_id=g.gene_id ", whereString,sep="")
 	TSSFPKMQuery<-paste("SELECT y.* from TSS x JOIN TSSData y ON x.TSS_group_id=y.TSS_group_id JOIN genes g on x.gene_id=g.gene_id ", whereStringFPKM,sep="")
 	TSSDiffQuery<-paste("SELECT y.* from TSS x JOIN TSSExpDiffData y ON x.TSS_group_id=y.TSS_group_id JOIN genes g on x.gene_id=g.gene_id ", whereStringDiff,sep="")
 	
-	CDSAnnotationQuery<-paste("SELECT * from CDS x JOIN genes g on x.gene_id=g.gene_id ", whereString,sep="")
+	CDSAnnotationQuery<-paste("SELECT x.* from CDS x LEFT JOIN CDSFeatures xf ON x.CDS_id=xf.CDS_id JOIN genes g on x.gene_id=g.gene_id ", whereString,sep="")
 	CDSFPKMQuery<-paste("SELECT y.* from CDS x JOIN CDSData y ON x.CDS_id = y.CDS_id JOIN genes g on x.gene_id=g.gene_id ", whereStringFPKM,sep="")
 	CDSDiffQuery<-paste("SELECT y.* from CDS x JOIN CDSExpDiffData y ON x.CDS_id = y.CDS_id JOIN genes g on x.gene_id=g.gene_id ", whereStringDiff,sep="")
+	
+	promotersDistQuery<-paste("SELECT x.* FROM promoterDiffData x LEFT JOIN genes g ON g.gene_id=g.gene_id ", whereString,sep="")
+	splicingDistQuery<-paste("SELECT x.* FROM splicingDiffData x LEFT JOIN genes g ON x.gene_id=g.gene_id ", whereString,sep="")
+	CDSDistQuery<-paste("SELECT x.* FROM CDSDiffData x LEFT JOIN genes g ON x.gene_id=g.gene_id ", whereString,sep="")
 	
 	begin<-dbSendQuery(object@DB,"BEGIN;")
 	
 	#fetch records
 	#genes
+	write("Getting gene information:",stderr())
+	write("\tFPKM",stderr())
 	genes.fpkm<-dbGetQuery(object@DB,geneFPKMQuery)
 	genes.fpkm$sample_name<-factor(genes.fpkm$sample_name,levels=myLevels)
+	write("\tDifferential Expression Data",stderr())
 	genes.diff<-dbGetQuery(object@DB,geneDiffQuery)
 	genes.diff$sample_1<-factor(genes.diff$sample_1,levels=myLevels)
 	genes.diff$sample_2<-factor(genes.diff$sample_2,levels=myLevels)
+	write("\tAnnotation Data",stderr())
+	genes.annot<-dbGetQuery(object@DB,geneAnnotationQuery)
 	
 	#isoforms
+	write("Getting isoforms information:",stderr())
+	write("\tFPKM",stderr())
 	isoform.fpkm<-dbGetQuery(object@DB,isoformFPKMQuery)
 	isoform.fpkm$sample_name<-factor(isoform.fpkm$sample_name,levels=myLevels)
+	write("\tDifferential Expression Data",stderr())
 	isoform.diff<-dbGetQuery(object@DB,isoformDiffQuery)
 	isoform.diff$sample_1<-factor(isoform.diff$sample_1,levels=myLevels)
 	isoform.diff$sample_2<-factor(isoform.diff$sample_2,levels=myLevels)
+	write("\tAnnotation Data",stderr())
+	isoform.annot<-dbGetQuery(object@DB,isoformAnnotationQuery)
 	
 	#CDS
+	write("Getting CDS information:",stderr())
+	write("\tFPKM",stderr())
 	CDS.fpkm<-dbGetQuery(object@DB,CDSFPKMQuery)
 	CDS.fpkm$sample_name<-factor(CDS.fpkm$sample_name,levels=myLevels)
+	write("\tDifferential Expression Data",stderr())
 	CDS.diff<-dbGetQuery(object@DB,CDSDiffQuery)
 	CDS.diff$sample_1<-factor(CDS.diff$sample_1,levels=myLevels)
 	CDS.diff$sample_2<-factor(CDS.diff$sample_2,levels=myLevels)
+	write("\tAnnotation Data",stderr())
+	CDS.annot<-dbGetQuery(object@DB,CDSAnnotationQuery)
+	
 	
 	#TSS
+	write("Getting TSS information:",stderr())
+	write("\tFPKM",stderr())
 	TSS.fpkm<-dbGetQuery(object@DB,TSSFPKMQuery)
 	TSS.fpkm$sample_name<-factor(TSS.fpkm$sample_name,levels=myLevels)
+	write("\tDifferential Expression Data",stderr())
 	TSS.diff<-dbGetQuery(object@DB,TSSDiffQuery)
 	TSS.diff$sample_1<-factor(TSS.diff$sample_1,levels=myLevels)
 	TSS.diff$sample_2<-factor(TSS.diff$sample_2,levels=myLevels)
+	write("\tAnnotation Data",stderr())
+	TSS.annot<-dbGetQuery(object@DB,TSSAnnotationQuery)
+	
+	#Promoters
+	write("Getting promoter information:", stderr())
+	write("\tdistData",stderr())
+	promoters.distData<-dbGetQuery(object@DB,promotersDistQuery)
+	promoters.distData$sample_1<-factor(promoters.distData$sample_1,levels=myLevels)
+	promoters.distData$sample_2<-factor(promoters.distData$sample_2,levels=myLevels)
+	
+	#Splicing
+	write("Getting splicing information:", stderr())
+	write("\tdistData",stderr())
+	splicing.distData<-dbGetQuery(object@DB,splicingDistQuery)
+	splicing.distData$sample_1<-factor(splicing.distData$sample_1,levels=myLevels)
+	splicing.distData$sample_2<-factor(splicing.distData$sample_2,levels=myLevels)
+
+	#relCDS
+	write("Getting relCDS information:", stderr())
+	write("\tdistData",stderr())
+	CDS.distData<-dbGetQuery(object@DB,CDSDistQuery)
+	CDS.distData$sample_1<-factor(CDS.distData$sample_1,levels=myLevels)
+	CDS.distData$sample_2<-factor(CDS.distData$sample_2,levels=myLevels)
+
 	
 	res<-new("CuffGeneSet",
 			#TODO: Fix ids so that it only displays those genes in CuffGeneSet
 			ids=as.character(dbGetQuery(object@DB,idQuery)),
-			annotation=dbGetQuery(object@DB,geneAnnotationQuery),
+			annotation=genes.annot,
 			fpkm=genes.fpkm,
 			diff=genes.diff,
 			isoforms=new("CuffFeatureSet",
-					annotation=dbGetQuery(object@DB,isoformAnnotationQuery),
+					annotation=isoform.annot,
 					fpkm=isoform.fpkm,
 					diff=isoform.diff
 					),
 			TSS=new("CuffFeatureSet",
-					annotation=dbGetQuery(object@DB,TSSAnnotationQuery),
+					annotation=TSS.annot,
 					fpkm=TSS.fpkm,
 					diff=TSS.diff
 					),
 			CDS=new("CuffFeatureSet",
-					annotation=dbGetQuery(object@DB,CDSAnnotationQuery),
+					annotation=CDS.annot,
 					fpkm=CDS.fpkm,
 					diff=CDS.diff
+					),
+			promoters=new("CuffFeatureSet",
+					annotation=genes.annot,
+					fpkm=genes.fpkm,
+					diff=promoters.distData
+					),
+			splicing=new("CuffFeatureSet",
+					annotation=TSS.annot,
+					fpkm=TSS.fpkm,
+					diff=splicing.distData
+					),
+			relCDS=new("CuffFeatureSet",
+					annotation=genes.annot,
+					fpkm=genes.fpkm,
+					diff=CDS.distData
 					)
 			)
 	end<-dbSendQuery(object@DB,"END;")		
@@ -344,6 +416,45 @@ setMethod("getGene",signature(object="CuffSet"),.getGene)
 }
 
 setMethod("getGenes",signature(object="CuffSet"),.getGenes)
+
+#getGeneIds from featureIds
+#SELECT DISTINCT g.gene_id from genes g LEFT JOIN isoforms i on g.gene_id=i.gene_id LEFT JOIN TSS t on g.gene_id=t.gene_id LEFT JOIN CDS c on g.gene_id=c.gene_id WHERE (g.gene_id IN ('$VAL') OR i.isoform_id IN ('$VAL') OR t.tss_group_id IN ('$VAL') OR c.CDS_id IN ('$VAL') OR g.gene_short_name IN ('$VAL'));
+
+
+#getSig() returns a list vectors of significant features by pairwise comparisons
+.getSig<-function(object,x,y,level="genes",testTable=FALSE){
+	mySamp<-samples(slot(object,level))
+	sigGenes<-list()
+	if(level %in% c('promoters','splicing','relCDS')){
+		diffTable<-slot(object,level)@table
+	}else{
+		diffTable<-slot(object,level)@tables$expDiffTable
+	}
+	
+	
+	for (ihat in c(1:(length(mySamp)-1))){
+		for(jhat in c((ihat+1):length(mySamp))){
+			i<-mySamp[ihat]
+			j<-mySamp[jhat]
+			testName<-paste(i,j,sep="vs")
+			queryString<-paste("('",i,"','",j,"')",sep="")
+			sql<-paste("SELECT ",slot(object,level)@idField," from ", diffTable," WHERE sample_1 IN ",queryString," AND sample_2 IN ",queryString, " AND significant='yes'",sep="")
+			sig<-dbGetQuery(object@DB,sql)
+			sigGenes[[testName]]<-sig[,1]
+		}
+	}
+	#TODO: Add conditional return for if x & y are not null, to just return that test...
+	if(testTable){
+		tmp<-reshape2:::melt.list(sigGenes)
+		return(cast(tmp,value~...,length))
+	}else{
+		return(sigGenes)
+	}
+
+}
+
+setMethod("getSig",signature(object="CuffSet"),.getSig)
+
 
 #Find similar genes
 .findSimilar<-function(object,x,n){

@@ -55,7 +55,7 @@ options(width=65)
 	\begin{itemize}
 		\item \Rpackage{RSQLite}
 		\item \Rpackage{ggplot2}
-		\item \Rpackage{reshape}
+		\item \Rpackage{reshape2}
 		\item \Rpackage{plyr}
 	\end{itemize}
 \end{itemize}
@@ -175,7 +175,7 @@ library(cummeRbund)
 @
 %%fileDir<-("../../extdata/")
 <<read>>=
-cuff <- readCufflinks(system.file("extdata", package="cummeRbund"))
+cuff <- readCufflinks(dir=system.file("extdata", package="cummeRbund"))
 cuff
 @
 Again, by default $dir$ is assumed to be the current working directory and \code{cuff<-readCufflinks()} should work if all appropriate files are in the current working directory. Should you need to rebuild the SQLite backend for any reason, you can add the option \Rfunarg{rebuild=T} to \Rmethod{readCufflinks}.  Once the database is created, \Rmethod{readCufflinks} will default to using the SQL backend and should not need to rebuild this database.
@@ -320,7 +320,7 @@ print(s)
 @
 
 <<geneset_plots_3,include=FALSE>>=
-v<-csVolcano(myGenes,cluster='both')
+v<-csVolcano(myGenes,"Fibroblasts","hESC")
 v
 @
 
@@ -345,12 +345,14 @@ Rudimentary k-means clustering is implemented as well.
 
 <<geneset_plots_5,include=FALSE>>=
 ic<-csCluster(myGenes,k=4)
-ic
+head(ic$cluster)
+icp<-csClusterPlot(ic)
+icp
 @
 
 <<label=geneset_plots_cluster,fig=TRUE,echo=FALSE>>=
 <<geneset_plots_5>>
-print(ic)
+print(icp)
 @
 
 \clearpage

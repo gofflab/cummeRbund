@@ -2,9 +2,8 @@
 # 
 # Author: lgoff
 ###############################################################################
-#library(RSQLite)
-#library(reshape)
-#drv <- dbDriver("SQLite")
+
+
 #####################
 #File Archetype parsing
 #####################
@@ -143,10 +142,13 @@ loadGenes<-function(fpkmFile,
 		
 		write("Writing promoterDiffData table",stderr())
 		promoterCols<-c(2,5:14)
-		#dbWriteTable(dbConn,'promoterDiffData',promoter[,promoterCols],row.names=F,append=T)
-		insert_SQL<-"INSERT INTO promoterDiffData VALUES(?,?,?,?,?,?,?,?,?,?,?)"
-		bulk_insert(dbConn,insert_SQL,promoter[,promoterCols])
-		
+		if(dim(promoter)[1]>0){
+			#dbWriteTable(dbConn,'promoterDiffData',promoter[,promoterCols],row.names=F,append=T)
+			insert_SQL<-"INSERT INTO promoterDiffData VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+			bulk_insert(dbConn,insert_SQL,promoter[,promoterCols])
+		}else{
+			write(paste("No records found in", promoterFile),stderr())
+		}
 	}
 	
 	#########
@@ -210,7 +212,7 @@ loadIsoforms<-function(fpkmFile,
 	}
 	
 	######
-	#Populate genes table
+	#Populate isoforms table
 	######
 	isoformCols<-c(1,4,6,2,3,7:9)
 	isoformsTable<-full[,isoformCols]
@@ -224,7 +226,7 @@ loadIsoforms<-function(fpkmFile,
 	bulk_insert(dbConn,insert_SQL,isoformsTable)
 	
 	######
-	#Populate geneData table
+	#Populate isoformData table
 	######
 	write("Reshaping isoformData table",stderr())
 	isoformmelt<-melt(full,id.vars=c("tracking_id"),measure.vars=-idCols,variable_name="sample_name")
@@ -269,11 +271,15 @@ loadIsoforms<-function(fpkmFile,
 		diff$sample_1<-make.db.names(dbConn,as.vector(diff$sample_1),unique=FALSE)
 		diff$sample_2<-make.db.names(dbConn,as.vector(diff$sample_2),unique=FALSE)
 		
-		write("Writing isoformExpDiffData table",stderr())
-		diffCols<-c(1,5:14)
-		#dbWriteTable(dbConn,'isoformExpDiffData',diff[,diffCols],row.names=F,append=T)
-		insert_SQL<-"INSERT INTO isoformExpDiffData VALUES(?,?,?,?,?,?,?,?,?,?,?)"
-		bulk_insert(dbConn,insert_SQL,diff[,diffCols])
+		if(dim(diff)[1]>0){
+			write("Writing isoformExpDiffData table",stderr())
+			diffCols<-c(1,5:14)
+			#dbWriteTable(dbConn,'isoformExpDiffData',diff[,diffCols],row.names=F,append=T)
+			insert_SQL<-"INSERT INTO isoformExpDiffData VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+			bulk_insert(dbConn,insert_SQL,diff[,diffCols])
+		}else{
+			write(paste("No records found in",diffFile),stderr())
+		}
 	}
 	
 }
@@ -339,46 +345,46 @@ loadTSS<-function(fpkmFile,
 	tssTable<-full[,c(1:4,7:9)]
 	write("Writing TSS table",stderr())
 	#dbWriteTable(dbConn,'TSS',tssTable,row.names=F,append=T)
-	insert_SQL<-"INSERT INTO TSS VALUES(?,?,?,?,?,?,?)"
-	bulk_insert(dbConn,insert_SQL,tssTable)
-	
-	if (nrow(tssTable) == 0)
-	{
-	    write("TSS FPKM tracking file was empty.",stderr())
-	    return()
+	if (nrow(tssTable)>0){
+		insert_SQL<-"INSERT INTO TSS VALUES(?,?,?,?,?,?,?)"
+		bulk_insert(dbConn,insert_SQL,tssTable)
+		
+		######
+		#Populate geneData table
+		######
+		write("Reshaping TSSData table",stderr())
+		tssmelt<-melt(full,id.vars=c("tracking_id"),measure.vars=-idCols,variable_name="sample_name")
+		
+		#Clean up and normalize data
+		tssmelt$measurement = ""
+		
+		tssmelt$measurement[grepl("_FPKM$",tssmelt$sample_name)] = "fpkm"
+		tssmelt$measurement[grepl("_conf_lo$",tssmelt$sample_name)] = "conf_lo"
+		tssmelt$measurement[grepl("_conf_hi$",tssmelt$sample_name)] = "conf_hi"
+		tssmelt$measurement[grepl("_status$",tssmelt$sample_name)] = "status"
+		
+		tssmelt$sample_name<-gsub("_FPKM$","",tssmelt$sample_name)
+		tssmelt$sample_name<-gsub("_conf_lo$","",tssmelt$sample_name)
+		tssmelt$sample_name<-gsub("_conf_hi$","",tssmelt$sample_name)
+		tssmelt$sample_name<-gsub("_status$","",tssmelt$sample_name)
+		
+		#Adjust sample names with make.db.names
+		tssmelt$sample_name <- make.db.names(dbConn,as.vector(tssmelt$sample_name),unique=FALSE)
+		
+		#Recast
+		write("Recasting",stderr())
+		tssmelt<-as.data.frame(cast(tssmelt,...~measurement))
+		
+		#Write geneData table
+		write("Writing TSSData table",stderr())
+		#dbWriteTable(dbConn,'TSSData',as.data.frame(tssmelt[,c(1:2,5,3,4,6)]),row.names=F,append=T)
+
+		insert_SQL<-"INSERT INTO TSSData VALUES(?,?,?,?,?,?)"
+		bulk_insert(dbConn,insert_SQL,tssmelt[,c(1:2,5,3,4,6)])
+	}else{
+		write(paste("No records found in",fpkmFile),stderr())
+		write("TSS FPKM tracking file was empty.",stderr())
 	}
-	
-	######
-	#Populate geneData table
-	######
-	write("Reshaping TSSData table",stderr())
-	tssmelt<-melt(full,id.vars=c("tracking_id"),measure.vars=-idCols,variable_name="sample_name")
-	
-	#Clean up and normalize data
-	tssmelt$measurement = ""
-	
-	tssmelt$measurement[grepl("_FPKM$",tssmelt$sample_name)] = "fpkm"
-	tssmelt$measurement[grepl("_conf_lo$",tssmelt$sample_name)] = "conf_lo"
-	tssmelt$measurement[grepl("_conf_hi$",tssmelt$sample_name)] = "conf_hi"
-	tssmelt$measurement[grepl("_status$",tssmelt$sample_name)] = "status"
-	
-	tssmelt$sample_name<-gsub("_FPKM$","",tssmelt$sample_name)
-	tssmelt$sample_name<-gsub("_conf_lo$","",tssmelt$sample_name)
-	tssmelt$sample_name<-gsub("_conf_hi$","",tssmelt$sample_name)
-	tssmelt$sample_name<-gsub("_status$","",tssmelt$sample_name)
-	
-	#Adjust sample names with make.db.names
-	tssmelt$sample_name <- make.db.names(dbConn,as.vector(tssmelt$sample_name),unique=FALSE)
-	
-	#Recast
-	write("Recasting",stderr())
-	tssmelt<-as.data.frame(cast(tssmelt,...~measurement))
-	
-	#Write geneData table
-	write("Writing TSSData table",stderr())
-	#dbWriteTable(dbConn,'TSSData',as.data.frame(tssmelt[,c(1:2,5,3,4,6)]),row.names=F,append=T)
-	insert_SQL<-"INSERT INTO TSSData VALUES(?,?,?,?,?,?)"
-	bulk_insert(dbConn,insert_SQL,tssmelt[,c(1:2,5,3,4,6)])
 	#######
 	#Handle tss_groups_exp.diff
 	#######
@@ -389,15 +395,19 @@ loadTSS<-function(fpkmFile,
 		diffArgs$file = diffFile
 		diff<-as.data.frame(do.call(read.table,diffArgs))
 		
-		#Adjust sample names with make.db.names
-		diff$sample_1<-make.db.names(dbConn,as.vector(diff$sample_1),unique=FALSE)
-		diff$sample_2<-make.db.names(dbConn,as.vector(diff$sample_2),unique=FALSE)
-		
-		write("Writing TSSExpDiffData table",stderr())
-		diffCols<-c(1,5:14)
-		#dbWriteTable(dbConn,'TSSExpDiffData',diff[,diffCols],row.names=F,append=T)
-		insert_SQL<-"INSERT INTO TSSExpDiffData VALUES(?,?,?,?,?,?,?,?,?,?,?)"
-		bulk_insert(dbConn,insert_SQL,diff[,diffCols])
+		if(dim(diff)[1]>0){
+			#Adjust sample names with make.db.names
+			diff$sample_1<-make.db.names(dbConn,as.vector(diff$sample_1),unique=FALSE)
+			diff$sample_2<-make.db.names(dbConn,as.vector(diff$sample_2),unique=FALSE)
+
+			write("Writing TSSExpDiffData table",stderr())
+			diffCols<-c(1,5:14)
+			#dbWriteTable(dbConn,'TSSExpDiffData',diff[,diffCols],row.names=F,append=T)
+			insert_SQL<-"INSERT INTO TSSExpDiffData VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+			bulk_insert(dbConn,insert_SQL,diff[,diffCols])
+		}else{
+			write(paste("No records found in",diffFile),stderr())
+		}
 	}
 	
 	#########
@@ -409,12 +419,15 @@ loadTSS<-function(fpkmFile,
 		splicingArgs$file = splicingFile
 		splicing<-as.data.frame(do.call(read.table,splicingArgs))
 		
-		write("Writing splicingDiffData table",stderr())
-		splicingCols<-c(1:2,5:14)
-		#dbWriteTable(dbConn,'splicingDiffData',splicing[,splicingCols],row.names=F,append=T)
-		insert_SQL<-"INSERT INTO splicingDiffData VALUES(?,?,?,?,?,?,?,?,?,?,?,?)"
-		bulk_insert(dbConn,insert_SQL,splicing[,splicingCols])
-		
+		if(dim(splicing)[1]>0){
+			write("Writing splicingDiffData table",stderr())
+			splicingCols<-c(1:2,5:14)
+			#dbWriteTable(dbConn,'splicingDiffData',splicing[,splicingCols],row.names=F,append=T)
+			insert_SQL<-"INSERT INTO splicingDiffData VALUES(?,?,?,?,?,?,?,?,?,?,?,?)"
+			bulk_insert(dbConn,insert_SQL,splicing[,splicingCols])
+		}else{
+			write(paste("No records found in",splicingFile),stderr())
+		}
 	}
 	
 }
@@ -481,46 +494,47 @@ loadCDS<-function(fpkmFile,
 	cdsTable<-full[,c(1:4,6:9)]
 	write("Writing CDS table",stderr())
 	#dbWriteTable(dbConn,'CDS',cdsTable,row.names=F,append=T)
-	insert_SQL<-"INSERT INTO CDS VALUES(?,?,?,?,?,?,?,?)"
-	bulk_insert(dbConn,insert_SQL,cdsTable)
+	if (nrow(cdsTable)>0){
+		insert_SQL<-"INSERT INTO CDS VALUES(?,?,?,?,?,?,?,?)"
+		bulk_insert(dbConn,insert_SQL,cdsTable)
+		
+		######
+		#Populate geneData table
+		######
+		write("Reshaping CDSData table",stderr())
+		cdsmelt<-melt(full,id.vars=c("tracking_id"),measure.vars=-idCols,variable_name="sample_name")
+		
+		#Clean up and normalize data
+		cdsmelt$measurement = ""
+		
+		cdsmelt$measurement[grepl("_FPKM$",cdsmelt$sample_name)] = "fpkm"
+		cdsmelt$measurement[grepl("_conf_lo$",cdsmelt$sample_name)] = "conf_lo"
+		cdsmelt$measurement[grepl("_conf_hi$",cdsmelt$sample_name)] = "conf_hi"
+		cdsmelt$measurement[grepl("_status$",cdsmelt$sample_name)] = "status"
+		
+		cdsmelt$sample_name<-gsub("_FPKM$","",cdsmelt$sample_name)
+		cdsmelt$sample_name<-gsub("_conf_lo$","",cdsmelt$sample_name)
+		cdsmelt$sample_name<-gsub("_conf_hi$","",cdsmelt$sample_name)
+		cdsmelt$sample_name<-gsub("_status$","",cdsmelt$sample_name)
+		
+		#Adjust sample names with make.db.names
+		cdsmelt$sample_name <- make.db.names(dbConn,as.vector(cdsmelt$sample_name),unique=FALSE)
+		
+		#Recast
+		write("Recasting",stderr())
+		cdsmelt<-as.data.frame(cast(cdsmelt,...~measurement))
+		
+		#Write geneData table
+		write("Writing CDSData table",stderr())
+		#dbWriteTable(dbConn,'CDSData',as.data.frame(cdsmelt[,c(1:2,5,3,4,6)]),row.names=F,append=T)
+		insert_SQL<-"INSERT INTO CDSData VALUES(?,?,?,?,?,?)"
+		bulk_insert(dbConn,insert_SQL,cdsmelt[,c(1:2,5,3,4,6)])
 	
-	if (nrow(cdsTable) == 0)
-	{
-	    write("CDS FPKM tracking file was empty.",stderr())
-	    return()
+	}else {
+		write(paste("No records found in",fpkmFile),stderr())
+		write("CDS FPKM tracking file was empty.",stderr())
 	}
 	
-	######
-	#Populate geneData table
-	######
-	write("Reshaping CDSData table",stderr())
-	cdsmelt<-melt(full,id.vars=c("tracking_id"),measure.vars=-idCols,variable_name="sample_name")
-	
-	#Clean up and normalize data
-	cdsmelt$measurement = ""
-	
-	cdsmelt$measurement[grepl("_FPKM$",cdsmelt$sample_name)] = "fpkm"
-	cdsmelt$measurement[grepl("_conf_lo$",cdsmelt$sample_name)] = "conf_lo"
-	cdsmelt$measurement[grepl("_conf_hi$",cdsmelt$sample_name)] = "conf_hi"
-	cdsmelt$measurement[grepl("_status$",cdsmelt$sample_name)] = "status"
-	
-	cdsmelt$sample_name<-gsub("_FPKM$","",cdsmelt$sample_name)
-	cdsmelt$sample_name<-gsub("_conf_lo$","",cdsmelt$sample_name)
-	cdsmelt$sample_name<-gsub("_conf_hi$","",cdsmelt$sample_name)
-	cdsmelt$sample_name<-gsub("_status$","",cdsmelt$sample_name)
-	
-	#Adjust sample names with make.db.names
-	cdsmelt$sample_name <- make.db.names(dbConn,as.vector(cdsmelt$sample_name),unique=FALSE)
-	
-	#Recast
-	write("Recasting",stderr())
-	cdsmelt<-as.data.frame(cast(cdsmelt,...~measurement))
-	
-	#Write geneData table
-	write("Writing CDSData table",stderr())
-	#dbWriteTable(dbConn,'CDSData',as.data.frame(cdsmelt[,c(1:2,5,3,4,6)]),row.names=F,append=T)
-	insert_SQL<-"INSERT INTO CDSData VALUES(?,?,?,?,?,?)"
-	bulk_insert(dbConn,insert_SQL,cdsmelt[,c(1:2,5,3,4,6)])
 	
 	#######
 	#Handle cds_groups_exp.diff
@@ -532,15 +546,19 @@ loadCDS<-function(fpkmFile,
 		diffArgs$file = diffFile
 		diff<-as.data.frame(do.call(read.table,diffArgs))
 		
-		#Adjust sample names with make.db.names
-		diff$sample_1<-make.db.names(dbConn,as.vector(diff$sample_1),unique=FALSE)
-		diff$sample_2<-make.db.names(dbConn,as.vector(diff$sample_2),unique=FALSE)
-		
-		write("Writing CDSExpDiffData table",stderr())
-		diffCols<-c(1,5:14)
-		#dbWriteTable(dbConn,'CDSExpDiffData',diff[,diffCols],row.names=F,append=T)
-		insert_SQL<-"INSERT INTO CDSExpDiffData VALUES(?,?,?,?,?,?,?,?,?,?,?)"
-		bulk_insert(dbConn,insert_SQL,diff[,diffCols])
+		if(dim(diff)[1]>0){
+			#Adjust sample names with make.db.names
+			diff$sample_1<-make.db.names(dbConn,as.vector(diff$sample_1),unique=FALSE)
+			diff$sample_2<-make.db.names(dbConn,as.vector(diff$sample_2),unique=FALSE)
+			
+			write("Writing CDSExpDiffData table",stderr())
+			diffCols<-c(1,5:14)
+			#dbWriteTable(dbConn,'CDSExpDiffData',diff[,diffCols],row.names=F,append=T)
+			insert_SQL<-"INSERT INTO CDSExpDiffData VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+			bulk_insert(dbConn,insert_SQL,diff[,diffCols])
+		}else{
+			write(paste("No records found in",diffFile),stderr())
+		}
 	}
 	
 	#########
@@ -551,13 +569,15 @@ loadCDS<-function(fpkmFile,
 		write(paste("Reading ",CDSDiff,sep=""),stderr())
 		CDSDiffArgs$file = CDSDiff
 		CDS<-as.data.frame(do.call(read.table,CDSDiffArgs))
-		
-		write("Writing CDSDiffData table",stderr())
-		CDSCols<-c(2,5:14)
-		#dbWriteTable(dbConn,'CDSDiffData',CDS[,CDSCols],row.names=F,append=T)
-		insert_SQL<-"INSERT INTO CDSDiffData VALUES(?,?,?,?,?,?,?,?,?,?,?)"
-		bulk_insert(dbConn,insert_SQL,CDS[,CDSCols])
-		
+		if(dim(CDS)[1]>0){
+			write("Writing CDSDiffData table",stderr())
+			CDSCols<-c(2,5:14)
+			#dbWriteTable(dbConn,'CDSDiffData',CDS[,CDSCols],row.names=F,append=T)
+			insert_SQL<-"INSERT INTO CDSDiffData VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+			bulk_insert(dbConn,insert_SQL,CDS[,CDSCols])
+		}else{
+			write(paste("No records found in",CDSDiff),stderr())
+		}
 	}
 	
 }
@@ -991,7 +1011,6 @@ createDB_noIndex<-function(dbFname="cuffData.db",driver="SQLite") {
 -- Created:       2011-05-02 12:52
 PRAGMA foreign_keys = OFF;
 PRAGMA synchronous = OFF;
-PRAGMA journal_mode = MEMORY;
 -- Schema: cuffData
 BEGIN;
 DROP TABLE IF EXISTS "genes";
@@ -1339,7 +1358,7 @@ COMMIT;
 }
 
 
-createIndices<-function(dbFname="cuffData.db",driver="SQLite"){
+createIndices<-function(dbFname="cuffData.db",driver="SQLite",verbose=F){
 	
 	drv<-dbDriver(driver)
 	db <- dbConnect(drv,dbname=dbFname)
@@ -1351,6 +1370,8 @@ CREATE INDEX "genes.cc_index" ON "genes"("class_code");
 CREATE INDEX "TSS.fk_TSS_genes1" ON "TSS"("gene_id");
 CREATE INDEX "TSSData.fk_TSSData_TSS1" ON "TSSData"("TSS_group_id");
 CREATE INDEX "TSSData.fk_TSSData_samples1" ON "TSSData"("sample_name");
+CREATE INDEX "TSS.PRIMARY" ON "TSS"("TSS_group_id");
+CREATE INDEX "CDS.PRIMARY" ON "CDS"("CDS_id");
 CREATE INDEX "CDS.fk_CDS_genes1" ON "CDS"("gene_id");
 CREATE INDEX "CDS.fk_CDS_TSS1" ON "CDS"("TSS_group_id");
 CREATE INDEX "CDSData.fk_CDSData_CDS1" ON "CDSData"("CDS_id");
@@ -1384,6 +1405,7 @@ CREATE INDEX "geneExpDiffData.fk_geneExpDiffData_samples1" ON "geneExpDiffData"(
 CREATE INDEX "geneExpDiffData.fk_geneExpDiffData_samples2" ON "geneExpDiffData"("sample_2");
 CREATE INDEX "geneExpDiffData.geneExpDiff_status_index" ON "geneExpDiffData"("status");
 CREATE INDEX "geneExpDiffData.geneExpDiff_sig_index" ON "geneExpDiffData"("significant","p_value","q_value","test_stat");
+CREATE INDEX "isoforms.PRIMARY" ON "isoforms"("isoform_id");
 CREATE INDEX "isoforms.fk_isoforms_TSS1" ON "isoforms"("TSS_group_id");
 CREATE INDEX "isoforms.fk_isoforms_CDS1" ON "isoforms"("CDS_id");
 CREATE INDEX "isoforms.fk_isoforms_genes1" ON "isoforms"("gene_id");
@@ -1397,8 +1419,12 @@ CREATE INDEX "isoformFeatures.fk_isoformFeatures_isoforms1" ON "isoformFeatures"
 '
 	create.sql <- strsplit(index.text,"\n")[[1]]
 	
-	tmp <- sapply(create.sql,function(x) sqliteQuickSQL(db,x))
-
+	tmp <- sapply(create.sql,function(x){
+			if (verbose){
+						write(paste(x,sep=""),stderr())
+					}
+			sqliteQuickSQL(db,x)
+	})
 }
 
 
@@ -1488,13 +1514,66 @@ readCufflinks<-function(dir = getwd(),
 					isoforms = new("CuffData", DB = dbConn, tables = list(mainTable = "isoforms",dataTable = "isoformData",expDiffTable = "isoformExpDiffData",featureTable = "isoformFeatures"), filters = list(),type="isoforms",idField = "isoform_id"),
 					TSS = new("CuffData", DB = dbConn, tables = list(mainTable = "TSS",dataTable = "TSSData",expDiffTable = "TSSExpDiffData",featureTable = "TSSFeatures"), filters = list(),type = "TSS",idField = "TSS_group_id"),
 					CDS = new("CuffData", DB = dbConn, tables = list(mainTable = "CDS",dataTable = "CDSData",expDiffTable = "CDSExpDiffData",featureTable = "CDSFeatures"), filters = list(),type = "CDS",idField = "CDS_id"),
-					promoters = new("CuffDist", DB = dbConn, table = "promoterDiffData",type="promoter",testId="gene_id"),
-					splicing = new("CuffDist", DB = dbConn, table = "splicingDiffData",type="splicing",testId="TSS_group_id"),
-					relCDS = new("CuffDist", DB = dbConn, table = "CDSDiffData",type="relCDS",testId="gene_id")
+					promoters = new("CuffDist", DB = dbConn, table = "promoterDiffData",type="promoter",idField="gene_id"),
+					splicing = new("CuffDist", DB = dbConn, table = "splicingDiffData",type="splicing",idField="TSS_group_id"),
+					relCDS = new("CuffDist", DB = dbConn, table = "CDSDiffData",type="relCDS",idField="gene_id")
 			)
 	)	
 							
 }
+
+############
+# Handle GTF file
+############
+loadGTF<-function(gtfFile,dbConn) {
+	
+	#Error Trapping
+	if (missing(gtfFile))
+		stop("GTF file cannot be missing!")
+	
+	if (missing(dbConn))
+		stop("Must provide a dbConn connection")
+	
+	gtf<-read.table(gtfFile,sep="\t",header=F)
+	
+	
+	attributes<-melt(strsplit(as.character(gtf$V9),"; "))
+	colnames(attributes)<-c("attribute","featureID")
+	attributes<-paste(attributes$attribute,attributes$featureID)
+	attributes<-strsplit(as.character(attributes)," ")
+	attributes<-as.data.frame(do.call("rbind",attributes))
+	
+	colnames(attributes)<-c("attribute","value","featureID")
+	attributes<-attributes[,c(3,1,2)]
+	
+	#Grab only gene_ID and transcript_ID to add to features table
+	id.attributes<-attributes[attributes$attribute %in% c("gene_id","transcript_id"),]
+	id.attributes$featureID<-as.numeric(as.character(id.attributes$featureID))
+	id.attributes<-cast(id.attributes,...~attribute)
+	
+	#Main features table
+	features<-gtf[,c(1:8)]
+	colnames(features)<-c("seqname","source","type","start","end","score","strand","frame")
+	features$featureID<-as.numeric(as.character(rownames(features)))
+	
+	#Merge features and id.attributes
+	features<-merge(features,id.attributes,by.x='featureID',by.y='featureID')
+	features<-features[,c(1,10:11,2:9)]
+	
+	#strip gene_id and transcript_id from attributes
+	attributes<-attributes[!(attributes$attribute %in% c("gene_id","transcript_id")),]
+	
+	#Write features table
+	write("Writing features table",stderr())
+	#dbWriteTable(dbConn,'geneData',as.data.frame(genemelt[,c(1:2,5,3,4,6)]),row.names=F,append=T)
+	dbWriteTable(dbConn,'features',as.data.frame(features),append=F)
+	
+	#Write features table
+	write("Writing feature attributes table",stderr())
+	dbWriteTable(dbConn,'attributes',as.data.frame(attributes),append=F)
+	
+}
+	
 
 #######
 #Unit Test

@@ -21,7 +21,7 @@ setMethod("initialize","CuffFeatureSet",
 					annotation=annotation,
 					fpkm=fpkm,
 					diff=diff,
-					...)				
+					...)
 		}
 )
 
@@ -31,16 +31,20 @@ setMethod("initialize","CuffFeatureSet",
 #TODO: Add validity constraints
 setValidity("CuffFeatureSet",function(object){
 			TRUE
+			#Add test for genes with no expression
 		}
 )		
 
 #################
 #Class Methods	#
 #################
-#setMethod("show","CufFFeatureSet",function(object){
-#		cat(class(object),"instance")
-#		}
-#)
+setMethod("show","CuffFeatureSet",function(object){
+		cat(class(object),"instance\nSlots:
+			\tannotation
+			\tfpkm
+			\tdiff\n")
+		}
+)
 
 setMethod("length","CuffFeatureSet",
 		function(x){
@@ -94,12 +98,13 @@ setMethod("features",signature(object="CuffFeatureSet"),.features)
 	res<-melt(res)
 	res<-cast(res,tracking_id~sample_name)
 	res<-data.frame(res[,-1],row.names=res[,1])
+	res
 }
 
 setMethod("fpkmMatrix",signature(object="CuffFeatureSet"),.fpkmMatrix)
 
 .diffData<-function(object){
-	object@diff
+	return(object@diff)
 }
 
 setMethod("diffData",signature(object="CuffFeatureSet"),.diffData)
@@ -139,9 +144,7 @@ setMethod("annotation","CuffFeatureSet",function(object){
 	## 1. using the rehape package and other funcs the data is clustered, scaled, and reshaped
 	## using simple options or by a user supplied function
 	## 2. with the now resahped data the plot, the chosen labels and plot style are built
-	
-	#require(reshape)
-	#require(ggplot2)
+
 	
 	m=fpkmMatrix(object)
 
@@ -263,6 +266,7 @@ setMethod("annotation","CuffFeatureSet",function(object){
 	    g2 <- g2 + scale_fill_gradient2(low=heatscale[1], mid=heatscale[2], high=heatscale[3], midpoint=heatMidpoint, name=legendTitle)
 	}
 	
+	#g2<-g2+scale_x_discrete("",breaks=tracking_ids,labels=gene_short_names)
 	
 	
 	## finally add the fill colour ramp of your choice (default is blue to red)-- and return
@@ -332,12 +336,26 @@ setMethod("csScatter",signature(object="CuffFeatureSet"), .scatter)
 
 #Volcano plot
 .volcano<-function(object,x,y,xlimits=c(-20,20),...){
-	dat<-diffData(object=object,x=x,y=y)
+	samp<-samples(object)
+	
+	#check to make sure x and y are in samples
+	if (!all(c(x,y) %in% samp)){
+		stop("One or more values of 'x' or 'y' are not valid sample names!")
+	}
+	dat<-diffData(object=object)
+	
+	#subset dat for samples of interest
+	mySamples<-c(x,y)
+	dat<-dat[(dat$sample_1 %in% mySamples & dat$sample_2 %in% mySamples),]
+	
+	#Labels
 	s1<-unique(dat$sample_1)
 	s2<-unique(dat$sample_2)
 	
 	p<-ggplot(dat)
 	p<- p + geom_point(aes(x=ln_fold_change,y=-log10(p_value),color=significant),alpha=I(1/3))
+	
+	p<- p + opts(title=paste(s2,"/",s1,sep=""))
 	
 	#Set axis limits
 	p<- p + scale_x_continuous(limits=xlimits)
@@ -355,6 +373,16 @@ setMethod("csVolcano",signature(object="CuffFeatureSet"), .volcano)
 	#TODO: Test dat to ensure that there are >0 rows to plot.  If not, trap error and move on...
 	
 	colnames(dat)[1]<-"tracking_id"
+	#tracking_ids<-dat$tracking_id
+	obj_features <- features(object)
+	tracking_ids <- obj_features[,1]
+	
+	gene_labels<-obj_features$gene_short_name
+	#print(gene_labels)
+	gene_labels[is.na(gene_labels)] = tracking_ids[is.na(gene_labels)]
+	#print(gene_labels)
+	
+	dodge <- position_dodge(width=0.9) 
 	
 	if(logMode)
 	{
@@ -363,14 +391,14 @@ setMethod("csVolcano",signature(object="CuffFeatureSet"), .volcano)
 	    dat$conf_lo <- dat$conf_lo + pseudocount
     }
 	
-	p<-ggplot(dat,aes(x=tracking_id,y=fpkm,fill=tracking_id))
+	p<-ggplot(dat,aes(x=tracking_id,y=fpkm,fill=sample_name))
 	p <- p + 
-	    geom_bar(stat='identity')
+	    geom_bar(aes(group=1),position=dodge,stat='identity')
 	
 	if (showErrorbars)
 	{
 	    p <- p +
-		    geom_errorbar(aes(ymin=conf_lo,ymax=conf_hi,group=1),width=0.5)
+		    geom_errorbar(aes(ymin=conf_lo,ymax=conf_hi,group=1),position=dodge,width=0.5)
 	}
 	
 	if (logMode)
@@ -378,9 +406,9 @@ setMethod("csVolcano",signature(object="CuffFeatureSet"), .volcano)
 	    p <- p + scale_y_log10()
     }
 	
-	
-	p <- p + facet_wrap('sample_name') +
-    	opts(title=object@annotation$gene_short_name,axis.text.x=theme_text(hjust=0,angle=-90))
+	#gene_labels = dat$gene_short_name
+	p <- p + scale_x_discrete("",breaks=tracking_ids,labels=gene_labels) + 
+	    opts(title=deparse(substitute(object)),axis.text.x=theme_text(hjust=0,angle=-90))
     	
     # p<- p +
     #       geom_bar() +
@@ -399,7 +427,7 @@ setMethod("csVolcano",signature(object="CuffFeatureSet"), .volcano)
         p <- p + ylab("FPKM")
     }
 	
-	p <- p + opts(legend.position = "none")
+	#p <- p + opts(legend.position = "none")
 	
 	#Default cummeRbund colorscheme
 	p<-p + scale_fill_hue(l=50,h.start=200) + scale_color_hue(l=50,h.start=200)
@@ -461,23 +489,69 @@ setMethod("expressionPlot",signature(object="CuffFeatureSet"),.expressionPlot)
 #################
 #Clustering		#
 #################
-#Kmeans by expression profile using JSdist?
-.cluster<-function(object,k,iter.max=100, ...){
+#Kmeans by expression profile using JSdist
+#TODO:Make this function return an object of type CuffClusterSet
+#.cluster<-function(object, k, pseudocount=1, ...){
+#	library(cluster)
+#	m<-as.data.frame(fpkmMatrix(object))
+#	m<-m[rowSums(m)>0,]
+#	n<-JSdist(makeprobs(t(m)))
+#	clusters<-pam(n,k)
+#	clusters$fpkm<-m
+#	m<-m+pseudocount
+#	m$ids<-rownames(m)
+#	m$cluster<-factor(clusters$clustering)
+#	m.melt<-melt(m,id.vars=c("ids","cluster"))
+#	c<-ggplot(m.melt)
+#	c<-c+geom_line(aes(x=variable,y=value,color=cluster,group=ids)) + facet_wrap('cluster',scales='free')+scale_y_log10()
+#	
+#	#Default cummeRbund colorscheme
+#	c<-c + scale_color_hue(l=50,h.start=200)
+#	c
+#}
+
+.cluster<-function(object, k, pseudocount=1, ...){
+	library(cluster)
 	m<-as.data.frame(fpkmMatrix(object))
-	clusters<-kmeans(m,k,iter.max=iter.max)$cluster
-	m$ids<-rownames(m)
-	m$cluster<-factor(clusters)
-	m.melt<-melt(m,id.vars=c("ids","cluster"))
-	c<-ggplot(m.melt)
-	c<-c+geom_line(aes(x=variable,y=value,color=cluster,group=ids)) + facet_wrap('cluster',scales='free')
-	
-	#Default cummeRbund colorscheme
-	c<-c + scale_color_hue(l=50,h.start=200)
-	
-	c
+	m<-m[rowSums(m)>0,]
+	n<-JSdist(makeprobs(t(m)))
+	clusters<-pam(n,k, ...)
+	class(clusters)<-"list"
+	clusters$fpkm<-m
+	clusters
 }
 
 setMethod("csCluster",signature(object="CuffFeatureSet"),.cluster)
+
+csClusterPlot<-function(clustering,pseudocount=1.0,drawSummary=TRUE, sumFun=mean_cl_boot){
+	m<-clustering$fpkm+pseudocount
+	m$ids<-rownames(clustering$fpkm)
+	m$cluster<-factor(clustering$clustering)
+	m.melt<-melt(m,id.vars=c("ids","cluster"))
+	c<-ggplot(m.melt)
+	c<-c+geom_line(aes(x=variable,y=value,color=cluster,group=ids)) + facet_wrap('cluster',scales='free')+scale_y_log10()
+	if(drawSummary){
+		c <- c + stat_summary(aes(x=variable,y=value,group=1),fun.data=sumFun,color="black",fill="black",alpha=0.2,size=1.1,geom="smooth")
+	}
+	c<-c + scale_color_hue(l=50,h.start=200)
+	c
+}
+
+##Takes as first argument the object returned from csCluster (a modified 'cluster' list)
+#.clusterPlot<-function(clusters, pseudocount=1, ...){
+#	m<-clusters$fpkm
+#	m<-m+pseudocount
+#	m$ids<-rownames(m)
+#	m$cluster<-factor(clusters$clustering)
+#	m.melt<-melt(m,id.vars=c("ids","cluster"))
+#	c<-ggplot(m.melt)
+#	c<-c+geom_line(aes(x=variable,y=value,color=cluster,group=ids)) + facet_wrap('cluster',scales='free')+scale_y_log10()
+#	
+#	#Default cummeRbund colorscheme
+#	c<-c + scale_color_hue(l=50,h.start=200)
+#	c
+#}
+
 
 #TODO: Add csDendro method to produce dendrograms from fpkmMatrix with argument for Dimension (samples or features)
 
