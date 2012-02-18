@@ -91,10 +91,16 @@ setMethod("featureNames",signature(object="CuffFeatureSet"),.featureNames)
 
 setMethod("features",signature(object="CuffFeatureSet"),.features)
 
-.fpkmMatrix<-function(object){
-	res<-fpkm(object)
-	colnames(res)[1]<-"tracking_id"
-	res<-res[,c(1:3)]
+.fpkmMatrix<-function(object,fullnames=FALSE){
+	if(fullnames){
+		res<-fpkm(object,features=TRUE)
+		res$tracking_id<-paste(res$gene_short_name,res[,1],sep="|")
+	}else{
+		res<-fpkm(object)
+		colnames(res)[1]<-"tracking_id"	
+	}
+	selectedRows<-c('tracking_id','sample_name','fpkm')
+	res<-res[,selectedRows]
 	res<-melt(res)
 	res<-cast(res,tracking_id~sample_name)
 	res<-data.frame(res[,-1],row.names=res[,1])
@@ -139,14 +145,14 @@ setMethod("annotation","CuffFeatureSet",function(object){
 #There is no genericMethod yet, goal is to replace .heatmap with .ggheat for genericMethod 'csHeatmap'
 
 .ggheat<-function(object, rescaling='none', clustering='none', labCol=T, labRow=T, logMode=T, pseudocount=1.0, 
-		border=FALSE, heatscale= c(low='darkred',mid='orange',high='white'), heatMidpoint=NULL,...) {
+		border=FALSE, heatscale= c(low='darkred',mid='orange',high='white'), heatMidpoint=NULL,fullnames=T,...) {
 	## the function can be be viewed as a two step process
 	## 1. using the rehape package and other funcs the data is clustered, scaled, and reshaped
 	## using simple options or by a user supplied function
 	## 2. with the now resahped data the plot, the chosen labels and plot style are built
 
 	
-	m=fpkmMatrix(object)
+	m=fpkmMatrix(object,fullnames=fullnames)
 
 	#remove genes with no expression in any condition
 	m=m[!apply(m,1,sum)==0,]
@@ -353,7 +359,7 @@ setMethod("csScatter",signature(object="CuffFeatureSet"), .scatter)
 	s2<-unique(dat$sample_2)
 	
 	p<-ggplot(dat)
-	p<- p + geom_point(aes(x=ln_fold_change,y=-log10(p_value),color=significant),alpha=I(1/3))
+	p<- p + geom_point(aes(x=log2_fold_change,y=-log10(p_value),color=significant),alpha=I(1/3))
 	
 	p<- p + opts(title=paste(s2,"/",s1,sep=""))
 	
@@ -368,8 +374,15 @@ setMethod("csScatter",signature(object="CuffFeatureSet"), .scatter)
 
 setMethod("csVolcano",signature(object="CuffFeatureSet"), .volcano)
 
-.barplot<-function(object,logMode=TRUE,pseudocount=1.0,showErrorbars=TRUE,...){
+.barplot<-function(object,logMode=TRUE,pseudocount=1.0,showErrorbars=TRUE,showStatus=TRUE,...){
+	quant_types<-c("OK","FAIL","LOWDATA","HIDATA","TOOSHORT")
+	quant_types<-factor(quant_types,levels=quant_types)
+	quant_colors<-c("black","red","blue","orange","green")
+	names(quant_colors)<-quant_types
+	
 	dat<-fpkm(object,features=T)
+	dat$warning<-""
+	dat$warning[dat$quant_status!="OK"]<-"!"
 	#TODO: Test dat to ensure that there are >0 rows to plot.  If not, trap error and move on...
 	
 	colnames(dat)[1]<-"tracking_id"
@@ -394,7 +407,7 @@ setMethod("csVolcano",signature(object="CuffFeatureSet"), .volcano)
 	p<-ggplot(dat,aes(x=tracking_id,y=fpkm,fill=sample_name))
 	p <- p + 
 	    geom_bar(aes(group=1),position=dodge,stat='identity')
-	
+
 	if (showErrorbars)
 	{
 	    p <- p +
@@ -404,11 +417,18 @@ setMethod("csVolcano",signature(object="CuffFeatureSet"), .volcano)
 	if (logMode)
 	{
 	    p <- p + scale_y_log10()
+		status_pos = 1
     }
-	
+	if(showStatus){
+		if(logMode){
+			p <- p + geom_text(aes(x=tracking_id,y=1,label=warning,group=1),position=dodge,stat='identity',color='red',vjust=1.5,size=3)
+		}else{
+			p <- p + geom_text(aes(x=tracking_id,y=0,label=warning,group=1),position=dodge,color='red',stat='identity',vjust=1.5,size=3)
+		}
+	}
 	#gene_labels = dat$gene_short_name
 	p <- p + scale_x_discrete("",breaks=tracking_ids,labels=gene_labels) + 
-	    opts(title=deparse(substitute(object)),axis.text.x=theme_text(hjust=0,angle=-90))
+	    opts(axis.text.x=theme_text(hjust=0,angle=-90))
     	
     # p<- p +
     #       geom_bar() +
@@ -432,13 +452,21 @@ setMethod("csVolcano",signature(object="CuffFeatureSet"), .volcano)
 	#Default cummeRbund colorscheme
 	p<-p + scale_fill_hue(l=50,h.start=200) + scale_color_hue(l=50,h.start=200)
 	
+	#Recolor quant flags
+	p<- p+ scale_colour_manual(name='quant_status',values=quant_colors)
+	
 	p
 	
 }
 
 setMethod("expressionBarplot",signature(object="CuffFeatureSet"),.barplot)
 
-.expressionPlot<-function(object,logMode=FALSE,pseudocount=1.0, drawSummary=FALSE, sumFun=mean_cl_boot, showErrorbars=TRUE,...){
+.expressionPlot<-function(object,logMode=FALSE,pseudocount=1.0, drawSummary=FALSE, sumFun=mean_cl_boot, showErrorbars=TRUE,showStatus=TRUE,...){
+	quant_types<-c("OK","FAIL","LOWDATA","HIDATA","TOOSHORT")
+	quant_types<-factor(quant_types,levels=quant_types)
+	quant_colors<-c("black","red","blue","orange","green")
+	names(quant_colors)<-quant_types
+	
 	dat<-fpkm(object)
 	colnames(dat)[1]<-"tracking_id"
 	if(logMode)
@@ -457,11 +485,14 @@ setMethod("expressionBarplot",signature(object="CuffFeatureSet"),.barplot)
 				geom_errorbar(aes(x=sample_name, ymin=conf_lo,ymax=conf_hi,group=tracking_id),width=0.25)
 	}
 	
+	if(showStatus){
+		p <- p+ geom_point(aes(x=sample_name,y=fpkm,shape=quant_status,color=quant_status))
+	}
+	
 	if (logMode)
 	{
 		p <- p + scale_y_log10()
 	}
-	
 	
 	#drawMean
 	if(drawSummary){
@@ -475,7 +506,8 @@ setMethod("expressionBarplot",signature(object="CuffFeatureSet"),.barplot)
 		p <- p + ylab("FPKM")
 	}
 	
-	#p <- p + scale_color_brewer(palette="Set1")
+	#Recolor quant flags
+	p<- p+ scale_colour_manual(name='quant_status',values=quant_colors)
 	
 	p
 }
@@ -538,6 +570,23 @@ csClusterPlot<-function(clustering,pseudocount=1.0,drawSummary=TRUE, sumFun=mean
 	c
 }
 
+.dendro<-function(object,logMode=T,pseudocount=1){
+	fpkmMat<-fpkmMatrix(object)
+	if(logMode){
+		fpkmMat<-log10(fpkmMat+pseudocount)
+	}
+	res<-JSdist(makeprobs(fpkmMat))
+	#colnames(res)<-colnames(fpkmMat)
+	
+	#res<-as.dist(res)
+	res<-as.dendrogram(hclust(res))
+	plot(res)
+	res
+}
+
+setMethod("csDendro",signature(object="CuffFeatureSet"),.dendro)
+
+
 ##Takes as first argument the object returned from csCluster (a modified 'cluster' list)
 #.clusterPlot<-function(clusters, pseudocount=1, ...){
 #	m<-clusters$fpkm
@@ -553,10 +602,51 @@ csClusterPlot<-function(clustering,pseudocount=1.0,drawSummary=TRUE, sumFun=mean
 #	c
 #}
 
+.density<-function(object, logMode = TRUE, pseudocount=1.0, labels, features=FALSE, ...){
+	dat<-fpkm(object,features=features)
+	if(logMode) dat$fpkm<-dat$fpkm+pseudocount
+	p<-ggplot(dat)
+	if(logMode) {
+		p<-p+geom_density(aes(x= log10(fpkm),group=sample_name,color=sample_name,fill=sample_name),alpha=I(1/3))
+	}else{
+		p<-p+geom_density(aes(x=fpkm,group=sample_name,color=sample_name,fill=sample_name),alpha=I(1/3))
+	}
+	
+	#p<-p + opts(title=object@tables$mainTable)
+	
+	#Default cummeRbund colorscheme
+	p<-p + scale_fill_hue(l=50,h.start=200) + scale_color_hue(l=50,h.start=200)
+	
+	#TODO: Add label callout
+	p
+}
 
-#TODO: Add csDendro method to produce dendrograms from fpkmMatrix with argument for Dimension (samples or features)
+setMethod("csDensity",signature(object="CuffFeatureSet"),.density)
 
 
 #################
 #Misc			#
 #################
+.makeIdentityMatrix<-function(sampleNames){
+	d<-diag(length(sampleNames))
+}
+
+.specificity<-function(object,logMode=T,pseudocount=1,relative=FALSE,...){
+	fpkms<-fpkmMatrix(object,...)
+	if(logMode){
+		fpkms<-log10(fpkms+pseudocount)
+	}
+	fpkms<-t(makeprobs(t(fpkms)))
+	d<-diag(ncol(fpkms))
+	res<-apply(d,MARGIN=1,function(q){
+				JSdistFromP(fpkms,q)
+			})
+	colnames(res)<-paste(colnames(fpkms),"_spec",sep="")
+	
+	if(relative){
+		res<-res/max(res)
+	}
+	1-res
+}
+
+setMethod("csSpecificity",signature(object="CuffFeatureSet"),.specificity)

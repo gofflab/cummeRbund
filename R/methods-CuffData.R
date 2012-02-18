@@ -98,7 +98,8 @@ setMethod("samples","CuffData",.samples)
 	if(!features){
 		FPKMQuery<-paste("SELECT * FROM",object@tables$dataTable)
 	}else{
-		FPKMQuery<-paste("SELECT xf.*,x.sample_name,x.fpkm,x.conf_hi, x.conf_lo FROM ",object@tables$dataTable," x LEFT JOIN ",object@tables$featureTable," xf ON x.",object@idField,"=xf.",object@idField,sep="")
+		FPKMQuery<-paste("SELECT xf.*,xm.*,x.sample_name,x.fpkm,x.conf_hi,x.conf_lo FROM ",object@tables$dataTable," x LEFT JOIN ",object@tables$featureTable," xf ON x.",object@idField,"=xf.",object@idField," LEFT JOIN ",object@tables$mainTable," xm ON x.",object@idField,"=xm.",object@idField,sep="")
+		print(FPKMQuery)
 	}
 	res<-dbGetQuery(object@DB,FPKMQuery)
 	res$sample_name<-factor(res$sample_name,levels=getLevels(object))
@@ -189,7 +190,7 @@ setMethod("getLevels",signature(object="CuffData"),.getLevels)
 
 #SELECT g.gene_id, g.class_code, g.nearest_ref_id, g.gene_short_name, g.locus, g.length, g.coverage, g.status, gd.sample_name, gd.fpkm, gd.conf_hi, gd.conf_lo FROM genes g LEFT JOIN geneData gd ON g.gene_id = gd.gene_id WHERE (g.gene_id = 'XLOC_000001');
 
-#SELECT g.gene_id, ged.* FROM genes g LEFT JOIN geneExpDiffData ged on g.gene_id = ged.gene_id WHERE ((sample_1 = 'H1_hESC' AND sample_2 = 'Fibroblasts') OR (sample_1 = 'Fibroblasts' AND sample_2 = 'H1_hESC')) AND ged.ln_fold_change>-20 AND ged.ln_fold_change<20 ;
+#SELECT g.gene_id, ged.* FROM genes g LEFT JOIN geneExpDiffData ged on g.gene_id = ged.gene_id WHERE ((sample_1 = 'H1_hESC' AND sample_2 = 'Fibroblasts') OR (sample_1 = 'Fibroblasts' AND sample_2 = 'H1_hESC')) AND ged.log2_fold_change>-20 AND ged.log2_fold_change<20 ;
 
 #Pivot table SQL for scatterplots
 #select g.*, sum(case when gd.sample_name = 'Fibroblasts' then fpkm end) as Fibroblasts, sum(case when gd.sample_name = 'H1_hESC' then fpkm end) as H1_hESC from genes g LEFT JOIN geneData gd on g.gene_id = gd.gene_id group by g.gene_id;
@@ -302,7 +303,7 @@ setMethod("csScatter",signature(object="CuffData"), .scatter)
 	s2<-unique(dat$sample_2)
 	
 	p<-ggplot(dat)
-	p<- p + geom_point(aes(x=ln_fold_change,y=-log10(p_value),color=significant),size=0.8)
+	p<- p + geom_point(aes(x=log2_fold_change,y=-log10(p_value),color=significant),size=0.8)
 	
 	#Add title and return
 	p<- p + opts(title=paste(object@tables$mainTable,": ",s2,"/",s1,sep=""))
@@ -338,7 +339,42 @@ setMethod("csVolcano",signature(object="CuffData"), .volcano)
 
 setMethod("csBoxplot",signature(object="CuffData"),.boxplot)
 
+.dendro<-function(object,logMode=T,pseudocount=1){
+	fpkmMat<-fpkmMatrix(object)
+	if(logMode){
+		fpkmMat<-log10(fpkmMat+pseudocount)
+	}
+	res<-JSdist(makeprobs(fpkmMat))
+	#colnames(res)<-colnames(fpkmMat)
+	
+	#res<-as.dist(res)
+	res<-as.dendro(hclust(res))
+	plot(res,title=paste("All",title=deparse(substitute(object))))
+	res
+}
+
+setMethod("csDendro",signature(object="CuffData"),.dendro)
+
 #############
 # Other Methods
 #############
+.specificity<-function(object,logMode=T,pseudocount=1,relative=FALSE,...){
+	fpkms<-fpkmMatrix(object,...)
+	if(logMode){
+		fpkms<-log10(fpkms+pseudocount)
+	}
+	fpkms<-t(makeprobs(t(fpkms)))
+	d<-diag(ncol(fpkms))
+	res<-apply(d,MARGIN=1,function(q){
+				JSdistFromP(fpkms,q)
+			})
+	colnames(res)<-paste(colnames(fpkms),"_spec",sep="")
+	
+	if(relative){
+		res<-res/max(res)
+	}
+	1-res
+}
+
+setMethod("csSpecificity",signature(object="CuffData"),.specificity)
 

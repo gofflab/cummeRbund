@@ -20,7 +20,9 @@ setGeneric("splicing",function(object) standardGeneric("splicing"))
 setGeneric("relCDS",function(object) standardGeneric("relCDS"))
 setGeneric("getGene",function(object,geneId,sampleIdList=NULL) standardGeneric("getGene"))
 setGeneric("getGenes",function(object,geneIdList,sampleIdList=NULL) standardGeneric("getGenes"))
-setGeneric("getSig", function(object,x,y,level="genes",testTable=FALSE) standardGeneric("getSig"))
+setGeneric("getFeatures",function(object,featureIdList,sampleIdList=NULL) standardGeneric("getFeatures"))
+setGeneric("getSig", function(object,x,y,alpha=0.05,level="genes") standardGeneric("getSig"))
+setGeneric("getSigTable", function(object,alpha=0.05,level='genes') standardGeneric("getSigTable"))
 setGeneric("addFeatures",function(object, features, ...) standardGeneric("addFeatures"))
 setGeneric("findSimilar",function(object,x,n) standardGeneric("findSimilar"))
 
@@ -35,7 +37,7 @@ setGeneric("fpkm",function(object, features=FALSE) standardGeneric("fpkm"))
 setGeneric("filters",function(object) standardGeneric("filters"))
 setGeneric("idField",function(object) standardGeneric("idField"))
 setGeneric("tables",function(object) standardGeneric("tables"))
-setGeneric("fpkmMatrix",function(object) standardGeneric("fpkmMatrix"))
+setGeneric("fpkmMatrix",function(object,...) standardGeneric("fpkmMatrix"))
 setGeneric("diffData",function(object, x, y, features=FALSE, lnFcCutoff=20, ...) standardGeneric("diffData"))
 setGeneric("getLevels",function(object) standardGeneric("getLevels"))
 
@@ -67,6 +69,8 @@ setGeneric("csCluster",function(object, k, iter.max=100, ...) standardGeneric("c
 #setGeneric("csClusterPlot",function(clustering, pseudocount=1.0) standardGeneric("csClusterPlot"))
 #setGeneric("diff",function(object) standardGeneric("diff"))
 setGeneric("annotation",function(object) standardGeneric("annotation"))
+setGeneric("csSpecificity",function(object,logMode=T,pseudocount=1,relative=FALSE,...) standardGeneric("csSpecificity"))
+setGeneric("csDendro",function(object,logMode=T,pseudocount=1) standardGeneric("csDendro"))
 
 ##################
 #CuffGene
