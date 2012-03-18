@@ -6,6 +6,7 @@
 %\VignettePackage{cummeRbund}
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\SweaveOpts{prefix.string=graphics/plot}
 \documentclass[10pt]{article}
 \usepackage{amsmath}
 \usepackage[authoryear,round]{natbib}
@@ -238,14 +239,25 @@ s
 print(s)
 @
 
-Volcano plots are also available for the \Rclass{CuffData} objects. Again, you must specify the comparisons by sample name.
+MvsA plots can be useful to determine any systematic bias that may be present between conditions. The CuffData method \Rmethod{MAplot()} can be used to examine these intensity vs fold-change plots. You must specify the sample names to use for the pairwise comparison with $x$ and $y$:
 <<global_plots_4,include=FALSE>>=
+m<-MAplot(genes(cuff),"hESC","Fibroblasts")
+m
+@
+
+<<label=global_plots_MA,fig=TRUE,echo=FALSE>>=
+<<global_plots_4>>
+print(m)
+@
+
+Volcano plots are also available for the \Rclass{CuffData} objects. Again, you must specify the comparisons by sample name.
+<<global_plots_5,include=FALSE>>=
 v<-csVolcano(genes(cuff),"hESC","Fibroblasts")
 v
 @
 
 <<label=global_plots_volcano,fig=TRUE,echo=FALSE>>=
-<<global_plots_4>>
+<<global_plots_5>>
 print(v)
 @
 
@@ -528,7 +540,7 @@ We have found this to be a more robust way to determine distance between genes u
 
 \section{Miscellaneous}
 \begin{itemize}
-	\item As of v1.1.3 we attempt to provide a new visual queue in most plots that will indicate the quantification status for a particular feature in each given condition. We have enabled this feature by default for most
+	\item As of v1.1.3 we attempt to provide new visual cues in most plots that will indicate the quantification status for a particular feature in each given condition. We have enabled this feature by default for most
 	plots to suggest a measure of reliability for each feature in a particular condition. In most cases, this feature can be disabled by setting 'showStatus=FALSE'.
 	\item All plotting functions return ggplot objects and the resulting objects can be manipulated/faceted/altered using standard ggplot2 methods.
 	\item There are occasional DB connectivity issues that arise.  Not entirely sure why yet.  If necessary, just \Rfunction{readCufflinks} again and this should solve connectivity issues with a new
