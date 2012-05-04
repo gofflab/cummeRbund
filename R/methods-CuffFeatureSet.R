@@ -16,11 +16,15 @@ setMethod("initialize","CuffFeatureSet",
 				annotation=data.frame(),
 				fpkm=data.frame(),
 				diff=data.frame(),
+				repFpkm=data.frame(),
+				count=data.frame(),
 				... ){
 			.Object<-callNextMethod(.Object,
 					annotation=annotation,
 					fpkm=fpkm,
 					diff=diff,
+					repFpkm=repFpkm,
+					count=count,
 					...)
 		}
 )
@@ -39,10 +43,12 @@ setValidity("CuffFeatureSet",function(object){
 #Class Methods	#
 #################
 setMethod("show","CuffFeatureSet",function(object){
-		cat(class(object),"instance\nSlots:
+		cat(class(object),"instance for ",length(object)," features\nSlots:
 			\tannotation
 			\tfpkm
-			\tdiff\n")
+			\trepFpkm
+			\tdiff
+			\tcount\n")
 		}
 )
 
@@ -70,6 +76,13 @@ setMethod("length","CuffFeatureSet",
 
 setMethod("samples","CuffFeatureSet",.samples)
 
+.replicates<-function(object){
+	res<-repFpkm(object)$rep_name
+	res
+}
+
+setMethod("replicates","CuffFeatureSet",.replicates)
+
 .fpkm<-function(object,features=FALSE){
 	if (features){
 		return (merge(object@annotation,object@fpkm))
@@ -78,6 +91,15 @@ setMethod("samples","CuffFeatureSet",.samples)
 	}
 }
 setMethod("fpkm",signature(object="CuffFeatureSet"),.fpkm)
+
+.repFpkm<-function(object,features=FALSE){
+	if (features){
+		return (merge(object@annotation,object@repFpkm))
+	}else{
+		return(object@repFpkm)
+	}
+}
+setMethod("repFpkm",signature(object="CuffFeatureSet"),.repFpkm)
 
 .featureNames<-function(object){
 	data.frame(tracking_id=object@annotation[,1],gene_short_name=object@annotation$gene_short_name)
@@ -91,7 +113,17 @@ setMethod("featureNames",signature(object="CuffFeatureSet"),.featureNames)
 
 setMethod("features",signature(object="CuffFeatureSet"),.features)
 
-.fpkmMatrix<-function(object,fullnames=FALSE){
+.fpkmMatrix<-function(object,fullnames=FALSE,sampleIdList){
+	#Sample subsetting
+	if(!missing(sampleIdList)){
+		if (!all(sampleIdList %in% samples(object))){
+			stop("Sample does not exist!")
+		}else{
+			mySamples<-sampleIdList
+		}
+	}else{
+		mySamples<-samples(object)
+	}
 	if(fullnames){
 		res<-fpkm(object,features=TRUE)
 		res$tracking_id<-paste(res$gene_short_name,res[,1],sep="|")
@@ -104,10 +136,75 @@ setMethod("features",signature(object="CuffFeatureSet"),.features)
 	res<-melt(res)
 	res<-dcast(res,tracking_id~sample_name)
 	res<-data.frame(res[,-1],row.names=res[,1])
+	if(!missing(sampleIdList)){
+		res<-res[,mySamples]
+	}
 	res
 }
 
 setMethod("fpkmMatrix",signature(object="CuffFeatureSet"),.fpkmMatrix)
+
+.repFpkmMatrix<-function(object,fullnames=FALSE,repIdList){
+	#Sample subsetting
+	if(!missing(repIdList)){
+		if (!all(repIdList %in% replicates(object))){
+			stop("Replicate does not exist!")
+		}else{
+			myReps<-repIdList
+		}
+	}else{
+		myReps<-replicates(object)
+	}
+	if(fullnames){
+		res<-repFpkm(object,features=TRUE)
+		res$tracking_id<-paste(res$gene_short_name,res[,1],sep="|")
+	}else{
+		res<-repFpkm(object)
+		colnames(res)[1]<-"tracking_id"	
+	}
+	selectedRows<-c('tracking_id','rep_name','fpkm')
+	res<-res[,selectedRows]
+	res<-melt(res)
+	res<-dcast(res,tracking_id~rep_name)
+	res<-data.frame(res[,-1],row.names=res[,1])
+	if(!missing(repIdList)){
+		res<-res[,myReps]
+	}
+	res
+}
+
+setMethod("repFpkmMatrix",signature(object="CuffFeatureSet"),.repFpkmMatrix)
+
+.countMatrix<-function(object,fullnames=FALSE,sampleIdList){
+	#Sample subsetting
+	if(!missing(sampleIdList)){
+		if (!all(sampleIdList %in% samples(object))){
+			stop("Sample does not exist!")
+		}else{
+			mySamples<-sampleIdList
+		}
+	}else{
+		mySamples<-samples(object)
+	}
+	if(fullnames){
+		res<-count(object,features=TRUE)
+		res$tracking_id<-paste(res$gene_short_name,res[,1],sep="|")
+	}else{
+		res<-count(object)
+		colnames(res)[1]<-"tracking_id"	
+	}
+	selectedRows<-c('tracking_id','sample_name','count')
+	res<-res[,selectedRows]
+	res<-melt(res)
+	res<-dcast(res,tracking_id~sample_name)
+	res<-data.frame(res[,-1],row.names=res[,1])
+	if(!missing(sampleIdList)){
+		res<-res[,mySamples]
+	}
+	res
+}
+
+setMethod("countMatrix",signature(object="CuffFeatureSet"),.countMatrix)
 
 .diffData<-function(object){
 	return(object@diff)
@@ -115,9 +212,15 @@ setMethod("fpkmMatrix",signature(object="CuffFeatureSet"),.fpkmMatrix)
 
 setMethod("diffData",signature(object="CuffFeatureSet"),.diffData)
 
-#setMethod("diff","CuffFeatureSet",function(object){
-#			return(object@diff)
-#		})
+.count<-function(object,features=FALSE){
+	if (features){
+		return (merge(object@annotation,object@count))
+	}else{
+		return(object@count)
+	}
+}
+
+setMethod("count",signature(object="CuffFeatureSet"),.count)
 
 setMethod("annotation","CuffFeatureSet",function(object){
 			return(object@annotation)
@@ -145,15 +248,17 @@ setMethod("annotation","CuffFeatureSet",function(object){
 #There is no genericMethod yet, goal is to replace .heatmap with .ggheat for genericMethod 'csHeatmap'
 
 .ggheat<-function(object, rescaling='none', clustering='none', labCol=T, labRow=T, logMode=T, pseudocount=1.0, 
-		border=FALSE, heatscale=c(low='darkred',mid='orange',high='white'), heatMidpoint=NULL,fullnames=T,...) {
+		border=FALSE, heatscale=c(low='lightyellow',mid='orange',high='darkred'), heatMidpoint=NULL,fullnames=T,replicates=FALSE,...) {
 	## the function can be be viewed as a two step process
 	## 1. using the rehape package and other funcs the data is clustered, scaled, and reshaped
 	## using simple options or by a user supplied function
 	## 2. with the now resahped data the plot, the chosen labels and plot style are built
 
-	
-	m=fpkmMatrix(object,fullnames=fullnames)
-
+	if(replicates){
+		m=repFpkmMatrix(object,fullnames=fullnames)
+	}else{
+		m=fpkmMatrix(object,fullnames=fullnames)
+	}
 	#remove genes with no expression in any condition
 	m=m[!apply(m,1,sum)==0,]
 	
@@ -344,7 +449,7 @@ setMethod("csHeatmap",signature("CuffFeatureSet"),.ggheat)
 setMethod("csScatter",signature(object="CuffFeatureSet"), .scatter)
 
 #Volcano plot
-.volcano<-function(object,x,y,xlimits=c(-20,20),...){
+.volcano<-function(object,x,y,alpha=0.05,showSignificant=TRUE,xlimits=c(-20,20),...){
 	samp<-samples(object)
 	
 	#check to make sure x and y are in samples
@@ -352,6 +457,8 @@ setMethod("csScatter",signature(object="CuffFeatureSet"), .scatter)
 		stop("One or more values of 'x' or 'y' are not valid sample names!")
 	}
 	dat<-diffData(object=object)
+	dat$significant<-'no'
+	dat$significant[dat$q_value<=alpha]<-'yes'
 	
 	#subset dat for samples of interest
 	mySamples<-c(x,y)
@@ -362,7 +469,11 @@ setMethod("csScatter",signature(object="CuffFeatureSet"), .scatter)
 	s2<-unique(dat$sample_2)
 	
 	p<-ggplot(dat)
-	p<- p + geom_point(aes(x=log2_fold_change,y=-log10(p_value),color=significant),alpha=I(1/3))
+	if(showSignificant){
+		p<- p + geom_point(aes(x=log2_fold_change,y=-log10(p_value),color=significant),alpha=I(1/3))
+	}else{
+		p<- p + geom_point(aes(x=log2_fold_change,y=-log10(p_value)),alpha=I(1/3))
+	}
 	
 	p<- p + opts(title=paste(s2,"/",s1,sep=""))
 	
@@ -377,7 +488,7 @@ setMethod("csScatter",signature(object="CuffFeatureSet"), .scatter)
 
 setMethod("csVolcano",signature(object="CuffFeatureSet"), .volcano)
 
-.barplot<-function(object,logMode=TRUE,pseudocount=1.0,showErrorbars=TRUE,showStatus=TRUE,...){
+.barplot<-function(object,logMode=TRUE,pseudocount=1.0,showErrorbars=TRUE,showStatus=TRUE,replicates=FALSE,...){
 	quant_types<-c("OK","FAIL","LOWDATA","HIDATA","TOOSHORT")
 	quant_types<-factor(quant_types,levels=quant_types)
 	quant_colors<-c("black","red","blue","orange","green")
@@ -387,6 +498,12 @@ setMethod("csVolcano",signature(object="CuffFeatureSet"), .volcano)
 	dat$warning<-""
 	dat$warning[dat$quant_status!="OK"]<-"!"
 	#TODO: Test dat to ensure that there are >0 rows to plot.  If not, trap error and move on...
+	
+	#Handle replicates
+	if(replicates){
+		repDat<-repFpkm(object)
+		colnames(repDat)[1]<-"tracking_id"
+	}
 	
 	colnames(dat)[1]<-"tracking_id"
 	#tracking_ids<-dat$tracking_id
@@ -408,13 +525,12 @@ setMethod("csVolcano",signature(object="CuffFeatureSet"), .volcano)
     }
 	
 	p<-ggplot(dat,aes(x=tracking_id,y=fpkm,fill=sample_name))
-	p <- p + 
-	    geom_bar(aes(group=1),position=dodge,stat='identity')
+	p <- p + geom_bar(position=dodge,stat='identity')
 
 	if (showErrorbars)
 	{
 	    p <- p +
-		    geom_errorbar(aes(ymin=conf_lo,ymax=conf_hi,group=1),position=dodge,width=0.5)
+		    geom_errorbar(aes(ymin=conf_lo,ymax=conf_hi),position=dodge,width=0.5)
 	}
 	
 	if (logMode)
@@ -424,9 +540,9 @@ setMethod("csVolcano",signature(object="CuffFeatureSet"), .volcano)
     }
 	if(showStatus){
 		if(logMode){
-			p <- p + geom_text(aes(x=tracking_id,y=1,label=warning,group=1),position=dodge,stat='identity',color='red',vjust=1.5,size=3)
+			p <- p + geom_text(aes(x=tracking_id,y=1,label=warning),position=dodge,stat='identity',color='red',vjust=1.5,size=3)
 		}else{
-			p <- p + geom_text(aes(x=tracking_id,y=0,label=warning,group=1),position=dodge,color='red',stat='identity',vjust=1.5,size=3)
+			p <- p + geom_text(aes(x=tracking_id,y=0,label=warning),position=dodge,color='red',stat='identity',vjust=1.5,size=3)
 		}
 	}
 	#gene_labels = dat$gene_short_name
@@ -464,7 +580,7 @@ setMethod("csVolcano",signature(object="CuffFeatureSet"), .volcano)
 
 setMethod("expressionBarplot",signature(object="CuffFeatureSet"),.barplot)
 
-.expressionPlot<-function(object,logMode=FALSE,pseudocount=1.0, drawSummary=FALSE, sumFun=mean_cl_boot, showErrorbars=TRUE,showStatus=TRUE,...){
+.expressionPlot<-function(object,logMode=FALSE,pseudocount=1.0, drawSummary=FALSE, sumFun=mean_cl_boot, showErrorbars=TRUE,showStatus=TRUE,replicates=FALSE,...){
 	quant_types<-c("OK","FAIL","LOWDATA","HIDATA","TOOSHORT")
 	quant_types<-factor(quant_types,levels=quant_types)
 	quant_colors<-c("black","red","blue","orange","green")
@@ -472,24 +588,39 @@ setMethod("expressionBarplot",signature(object="CuffFeatureSet"),.barplot)
 	
 	dat<-fpkm(object)
 	colnames(dat)[1]<-"tracking_id"
+	
+	if(replicates){
+		repDat<-repFpkm(object)
+		repDat$replicate<-as.factor(repDat$replicate)
+		colnames(repDat)[1]<-"tracking_id"
+	}
+	
 	if(logMode)
 	{
 		dat$fpkm <- dat$fpkm + pseudocount
 		dat$conf_hi <- dat$conf_hi + pseudocount
 		dat$conf_lo <- dat$conf_lo + pseudocount
+		
+		if(replicates){
+			repDat$fpkm<-repDat$fpkm + pseudocount
+		}
 	}
 	p <- ggplot(dat)
 	#dat$fpkm<- log10(dat$fpkm+pseudocount)
-	p <- p + 
-			geom_line(aes(x=sample_name,y=fpkm,group=tracking_id))
+	p <- p + geom_line(aes(x=sample_name,y=fpkm,group=tracking_id,color=tracking_id))
+	
+	if(replicates){
+		p <- p + geom_point(aes(x=sample_name,y=fpkm,color=tracking_id),size=2.5,shape=18,data=repDat)
+	}
+	
 	if (showErrorbars)
 	{
 		p <- p +
-				geom_errorbar(aes(x=sample_name, ymin=conf_lo,ymax=conf_hi,group=tracking_id),width=0.25)
+				geom_errorbar(aes(x=sample_name, ymin=conf_lo,ymax=conf_hi,color=tracking_id,group=tracking_id),width=0.25)
 	}
 	
 	if(showStatus){
-		p <- p+ geom_point(aes(x=sample_name,y=fpkm,shape=quant_status,color=quant_status))
+		p <- p+ geom_point(aes(x=sample_name,y=fpkm,shape=quant_status))
 	}
 	
 	if (logMode)
@@ -510,7 +641,7 @@ setMethod("expressionBarplot",signature(object="CuffFeatureSet"),.barplot)
 	}
 	
 	#Recolor quant flags
-	p<- p+ scale_colour_manual(name='quant_status',values=quant_colors)
+	#p<- p + scale_colour_manual(name='quant_status',values=quant_colors)
 	
 	p
 }
@@ -573,8 +704,12 @@ csClusterPlot<-function(clustering,pseudocount=1.0,drawSummary=TRUE, sumFun=mean
 	c
 }
 
-.dendro<-function(object,logMode=T,pseudocount=1){
-	fpkmMat<-fpkmMatrix(object)
+.dendro<-function(object,logMode=T,pseudocount=1,replicates=FALSE){
+	if(replicates){
+		fpkmMat<-repFpkmMatrix(object)
+	}else{
+		fpkmMat<-fpkmMatrix(object)
+	}
 	if(logMode){
 		fpkmMat<-log10(fpkmMat+pseudocount)
 	}
@@ -605,14 +740,20 @@ setMethod("csDendro",signature(object="CuffFeatureSet"),.dendro)
 #	c
 #}
 
-.density<-function(object, logMode = TRUE, pseudocount=1.0, labels, features=FALSE, ...){
-	dat<-fpkm(object,features=features)
+.density<-function(object, logMode = TRUE, pseudocount=1.0, labels, features=FALSE, replicates=FALSE,...){
+	if(replicates){
+		dat<-repFpkm(object,features=features)
+		colnames(dat)[colnames(dat)=="rep_name"]<-"condition"
+	}else{
+		dat<-fpkm(object,features=features)
+		colnames(dat)[colnames(dat)=="sample_name"]<-"condition"
+	}
 	if(logMode) dat$fpkm<-dat$fpkm+pseudocount
 	p<-ggplot(dat)
 	if(logMode) {
-		p<-p+geom_density(aes(x= log10(fpkm),group=sample_name,color=sample_name,fill=sample_name),alpha=I(1/3))
+		p<-p+geom_density(aes(x= log10(fpkm),group=condition,color=condition,fill=condition),alpha=I(1/3))
 	}else{
-		p<-p+geom_density(aes(x=fpkm,group=sample_name,color=sample_name,fill=sample_name),alpha=I(1/3))
+		p<-p+geom_density(aes(x=fpkm,group=condition,color=condition,fill=condition),alpha=I(1/3))
 	}
 	
 	#p<-p + opts(title=object@tables$mainTable)

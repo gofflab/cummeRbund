@@ -1,12 +1,12 @@
 Package: cummeRbund
 Title: Analysis, exploration, manipulation, and visualization of Cufflinks high-throughput sequencing data.
-Version: 1.3.0
-Date: 2011-08-18
+Version: 1.99.1
+Date: 2012-05-04
 Author: L. Goff, C. Trapnell
 Description: Allows for persistent storage, access, exploration, and manipulation of Cufflinks high-throughput sequencing data.  In addition, provides numerous plotting functions for commonly used visualizations.
 Suggests: 
 Imports: methods
-Depends: R (>= 2.7.0), RSQLite, ggplot2, reshape2
+Depends: R (>= 2.7.0), RSQLite, ggplot2, reshape2, fastcluster
 Suggests: cluster
 Maintainer: Loyal A. Goff <lgoff@csail.mit.edu>
 License: Artistic-2.0
@@ -21,6 +21,7 @@ Collate: 	AllGenerics.R
 			methods-CuffGene.R
 			methods-CuffFeature.R
 			tools.R
+			QC-reporting.R
 LazyLoad: yes
 biocViews: HighThroughputSequencing, HighThroughputSequencingData, RNAseq, RNAseqData, GeneExpression, DifferentialExpression, Infrastructure, DataImport, DataRepresentation, Visualization, Bioinformatics, Clustering, MultipleComparisons, QualityControl
 

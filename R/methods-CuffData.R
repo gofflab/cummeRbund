@@ -11,7 +11,7 @@
 setMethod("initialize","CuffData",
 			function(.Object,
 					DB,
-					tables=list(mainTable = "",dataTable = "",expDiffTable = "",featureTable = ""),
+					tables=list(mainTable = "",dataTable = "",expDiffTable = "",featureTable = "",countTable = "", replicateTable = ""),
 					filters=list(),
 					type = c("genes","isoforms","TSS","CDS"),
 					idField,
@@ -94,12 +94,38 @@ setMethod("featureNames","CuffData",.featureNames)
 
 setMethod("samples","CuffData",.samples)
 
-.fpkm<-function(object,features=FALSE){
-	if(!features){
-		FPKMQuery<-paste("SELECT * FROM",object@tables$dataTable)
+.replicates<-function(object){
+	res<-dbReadTable(object@DB,'replicates')
+	res<-res$rep_name
+	res
+}
+
+setMethod("replicates","CuffData",.replicates)
+
+.fpkm<-function(object,features=FALSE,sampleIdList){
+	#Sample subsetting
+	if(!missing(sampleIdList)){
+		if(.checkSamples(object@DB,sampleIdList)){
+			myLevels<-sampleIdList
+		}else{
+			stop("Sample does not exist!")
+		}
 	}else{
-		FPKMQuery<-paste("SELECT xf.*,xm.*,x.sample_name,x.fpkm,x.conf_hi,x.conf_lo FROM ",object@tables$dataTable," x LEFT JOIN ",object@tables$featureTable," xf ON x.",object@idField,"=xf.",object@idField," LEFT JOIN ",object@tables$mainTable," xm ON x.",object@idField,"=xm.",object@idField,sep="")
-		print(FPKMQuery)
+		myLevels<-getLevels(object)
+	}
+	#Sample Search String (SQL)
+	sampleString<-'('
+	for (i in myLevels){
+		sampleString<-paste(sampleString,"'",i,"',",sep="")
+	}
+	sampleString<-substr(sampleString,1,nchar(sampleString)-1)
+	sampleString<-paste(sampleString,")",sep="")
+	
+	if(!features){
+		FPKMQuery<-paste("SELECT * FROM ",object@tables$dataTable," WHERE sample_name IN ",sampleString,sep="")
+	}else{
+		FPKMQuery<-paste("SELECT xf.*,xm.*,x.sample_name,x.fpkm,x.conf_hi,x.conf_lo FROM ",object@tables$dataTable," x LEFT JOIN ",object@tables$featureTable," xf ON x.",object@idField,"=xf.",object@idField," LEFT JOIN ",object@tables$mainTable," xm ON x.",object@idField,"=xm.",object@idField," WHERE x.sample_name IN ",sampleString,sep="")
+		#print(FPKMQuery)
 	}
 	res<-dbGetQuery(object@DB,FPKMQuery)
 	res$sample_name<-factor(res$sample_name,levels=getLevels(object))
@@ -108,7 +134,79 @@ setMethod("samples","CuffData",.samples)
 
 setMethod("fpkm","CuffData",.fpkm)
 
-.fpkmMatrix<-function(object){
+.repFpkm<-function(object,features=FALSE,repIdList){
+	#Sample subsetting
+	if(!missing(repIdList)){
+		if(.checkReps(object@DB,repIdList)){
+			myLevels<-repIdList
+		}else{
+			stop("Replicate does not exist!")
+		}
+	}else{
+		myLevels<-getRepLevels(object)
+	}
+	#Sample Search String (SQL)
+	sampleString<-'('
+	for (i in myLevels){
+		sampleString<-paste(sampleString,"'",i,"',",sep="")
+	}
+	sampleString<-substr(sampleString,1,nchar(sampleString)-1)
+	sampleString<-paste(sampleString,")",sep="")
+	
+	if(!features){
+		FPKMQuery<-paste("SELECT * FROM ",object@tables$replicateTable," WHERE rep_name IN ",sampleString,sep="")
+	}else{
+		FPKMQuery<-paste("SELECT xf.*,xm.*,x.rep_name,x.raw_frags,x.internal_scaled_frags,x.external_scaled_frags,x.fpkm,x.effective_length,x.status FROM ",object@tables$replicateTable," x LEFT JOIN ",object@tables$featureTable," xf on x.",object@idField,"=xf.",object@idField," LEFT JOIN ",object@tables$mainTable," xm ON x.",object@idField,"=xm.",object@idField," WHERE x.rep_name IN ",sampleString,sep="")
+	}
+	#print(FPKMQuery)
+	res<-dbGetQuery(object@DB,FPKMQuery)
+	res$rep_name<-factor(res$rep_name,levels=getRepLevels(object))
+	res
+}
+
+setMethod("repFpkm","CuffData",.repFpkm)
+
+.count<-function(object,sampleIdList){
+	#Sample subsetting
+	if(!missing(sampleIdList)){
+		if(.checkSamples(object@DB,sampleIdList)){
+			myLevels<-sampleIdList
+		}else{
+			stop("Sample does not exist!")
+		}
+	}else{
+		myLevels<-getLevels(object)
+	}
+	#Sample Search String (SQL)
+	sampleString<-'('
+	for (i in myLevels){
+		sampleString<-paste(sampleString,"'",i,"',",sep="")
+	}
+	sampleString<-substr(sampleString,1,nchar(sampleString)-1)
+	sampleString<-paste(sampleString,")",sep="")
+	
+	CountQuery<-FPKMQuery<-paste("SELECT * FROM ",object@tables$countTable," WHERE sample_name IN ",sampleString,sep="")
+	
+	res<-dbGetQuery(object@DB,CountQuery)
+	res$sample_name<-factor(res$sample_name,levels=getLevels(object))
+	res
+	
+}
+
+setMethod("count","CuffData",.count)
+
+.fpkmMatrix<-function(object,fullnames=FALSE,sampleIdList){
+	#Sample subsetting
+	if(!missing(sampleIdList)){
+		if(.checkSamples(object@DB,sampleIdList)){
+			myLevels<-sampleIdList
+		}else{
+			stop("Sample does not exist!")
+		}
+	}else{
+		myLevels<-getLevels(object)
+	}
+	
 	samp<-samples(object)
 	FPKMMatQuery<-paste("select x.",object@idField,", ",sep="")
 	for (i in samp){
@@ -117,11 +215,75 @@ setMethod("fpkm","CuffData",.fpkm)
 	FPKMMatQuery<-substr(FPKMMatQuery, 1, nchar(FPKMMatQuery)-1)
 	FPKMMatQuery<-paste(FPKMMatQuery," from ",object@tables$mainTable," x LEFT JOIN ",object@tables$dataTable," xd on x.",object@idField," = xd.",object@idField," group by x.",object@idField,sep="")
 	res<-dbGetQuery(object@DB,FPKMMatQuery)
-	data.frame(res[,-1],row.names=res[,1])
+	res<-data.frame(res[,-1],row.names=res[,1])
+	if(!missing(sampleIdList)){
+		res<-data.frame(res[,sampleIdList],row.names=rownames(res))
+		colnames(res)<-sampleIdList
+	}
+	res
 }
 
 setMethod("fpkmMatrix","CuffData",.fpkmMatrix)
 
+.repFpkmMatrix<-function(object,fullnames=FALSE,repIdList){
+	#Sample subsetting
+	if(!missing(repIdList)){
+		if(.checkReps(object@DB,repIdList)){
+			myLevels<-repIdList
+		}else{
+			stop("Replicate does not exist!")
+		}
+	}else{
+		myLevels<-getRepLevels(object)
+	}
+	
+	samp<-replicates(object)
+	FPKMMatQuery<-paste("select x.",object@idField,", ",sep="")
+	for (i in samp){
+		FPKMMatQuery<-paste(FPKMMatQuery,"sum(case when xd.rep_name ='",i,"' then fpkm end) as ",i,",",sep="")
+	}
+	FPKMMatQuery<-substr(FPKMMatQuery, 1, nchar(FPKMMatQuery)-1)
+	FPKMMatQuery<-paste(FPKMMatQuery," from ",object@tables$mainTable," x LEFT JOIN ",object@tables$replicateTable," xd on x.",object@idField," = xd.",object@idField," group by x.",object@idField,sep="")
+	res<-dbGetQuery(object@DB,FPKMMatQuery)
+	res<-data.frame(res[,-1],row.names=res[,1])
+	if(!missing(repIdList)){
+		res<-data.frame(res[,repIdList],row.names=rownames(res))
+		colnames(res)<-repIdList
+	}
+	res
+}
+
+setMethod("repFpkmMatrix","CuffData",.repFpkmMatrix)
+
+.countMatrix<-function(object,fullnames=FALSE,sampleIdList){
+	#Sample subsetting
+	if(!missing(sampleIdList)){
+		if(.checkSamples(object@DB,sampleIdList)){
+			myLevels<-sampleIdList
+		}else{
+			stop("Sample does not exist!")
+		}
+	}else{
+		myLevels<-getLevels(object)
+	}
+	
+	samp<-samples(object)
+	CountMatQuery<-paste("select x.",object@idField,", ",sep="")
+	for (i in samp){
+		CountMatQuery<-paste(CountMatQuery,"sum(case when xd.sample_name ='",i,"' then count end) as ",i,",",sep="")
+	}
+	CountMatQuery<-substr(CountMatQuery, 1, nchar(CountMatQuery)-1)
+	CountMatQuery<-paste(CountMatQuery," from ",object@tables$mainTable," x LEFT JOIN ",object@tables$countTable," xd on x.",object@idField," = xd.",object@idField," group by x.",object@idField,sep="")
+	res<-dbGetQuery(object@DB,CountMatQuery)
+	res<-data.frame(res[,-1],row.names=res[,1])
+	if(!missing(sampleIdList)){
+		res<-data.frame(res[,sampleIdList],row.names=rownames(res))
+		colnames(res)<-sampleIdList
+	}
+	res
+}
+
+setMethod("countMatrix","CuffData",.countMatrix)
 
 #This needs a lot of work...
 #TODO: Change this to remove lnFcCutoff but make sure that functions that rely on diffData have their own FC cutoff so that plotting doesn't suffer
@@ -154,16 +316,34 @@ setMethod("diffData",signature(object="CuffData"),.diffData)
 	}else{
 		sql<-paste("SELECT x.",object@idField,", sum(case when x.sample_name = '",x,"' then x.fpkm end) AS 'x', sum(case when x.sample_name = '",y,"' then x.fpkm end) AS 'y' FROM ",object@tables$dataTable," x GROUP BY x.",object@idField,";",sep="")
 		#print(sql)
-	dat<-dbGetQuery(object@DB,sql)
-	
-	if(logMode){
-		dat$x<-log10(dat$x+pseudocount)
-		dat$y<-log10(dat$y+pseudocount)
+		dat<-dbGetQuery(object@DB,sql)
+		
+		if(logMode){
+			dat$x<-log10(dat$x+pseudocount)
+			dat$y<-log10(dat$y+pseudocount)
+		}
+		dat$A<-(dat$x+dat$y)/2
+		dat$M<-dat$x/dat$y
+		res<-dat[,c(1,4:5)]
+		res
 	}
-	dat$A<-(dat$x+dat$y)/2
-	dat$M<-dat$x/dat$y
-	res<-dat[,c(1,4:5)]
-	res
+}
+
+.getCountMA<-function(object,x,y,logMode=T,pseudocount=1){
+	if (missing(x) || missing(y)){
+		stop("You must supply both x and y.")
+	}else{
+		sql<-paste("SELECT x.",object@idField,", sum(case when x.sample_name = '",x,"' then x.count end) AS 'x', sum(case when x.sample_name = '",y,"' then x.count end) AS 'y' FROM ",object@tables$countTable," x GROUP BY x.",object@idField,";",sep="")
+		dat<-dbGetQuery(object@DB,sql)
+		
+		if(logMode){
+			dat$x<-log10(dat$x+pseudocount)
+			dat$y<-log10(dat$y+pseudocount)
+		}
+		dat$A<-(dat$x+dat$y)/2
+		dat$M<-dat$x/dat$y
+		res<-dat[,c(1,4:5)]
+		res
 	}
 }
 
@@ -205,6 +385,14 @@ setMethod("idField","CuffData",function(object){
 
 setMethod("getLevels",signature(object="CuffData"),.getLevels)
 
+.getRepLevels<-function(object){
+	levelsQuery<-'SELECT r.rep_name FROM replicates r JOIN samples s ON r.sample_name=s.sample_name ORDER BY s.sample_index ASC'
+	levels<-dbGetQuery(object@DB,levelsQuery)$rep_name
+	levels
+}
+
+setMethod("getRepLevels",signature(object="CuffData"),.getRepLevels)
+
 #Useful SQL commands
 
 #SELECT g.gene_id, g.class_code, g.nearest_ref_id, g.gene_short_name, g.locus, g.length, g.coverage, g.status, gd.sample_name, gd.fpkm, gd.conf_hi, gd.conf_lo FROM genes g LEFT JOIN geneData gd ON g.gene_id = gd.gene_id WHERE (g.gene_id = 'XLOC_000001');
@@ -219,18 +407,24 @@ setMethod("getLevels",signature(object="CuffData"),.getLevels)
 #Plotting
 ##################
 
-.density<-function(object, logMode = TRUE, pseudocount=1.0, labels, features=FALSE, ...){
+.density<-function(object, logMode = TRUE, pseudocount=1.0, labels, features=FALSE, replicates=FALSE,...){
 	if(is(object,'CuffData')) {
-		dat<-fpkm(object,features=features)
+		if(replicates){
+			dat<-repFpkm(object,features=features)
+			colnames(dat)[colnames(dat)=="rep_name"]<-"condition"
+		}else{
+			dat<-fpkm(object,features=features)
+			colnames(dat)[colnames(dat)=="sample_name"]<-"condition"
+		}
 	} else {
 		stop('Un-supported class of object.')
 	}
 	if(logMode) dat$fpkm<-dat$fpkm+pseudocount
 	p<-ggplot(dat)
 		if(logMode) {
-			p<-p+geom_density(aes(x= log10(fpkm),group=sample_name,color=sample_name,fill=sample_name),alpha=I(1/3))
+			p<-p+geom_density(aes(x= log10(fpkm),group=condition,color=condition,fill=condition),alpha=I(1/3))
 		}else{
-			p<-p+geom_density(aes(x=fpkm,group=sample_name,color=sample_name,fill=sample_name),alpha=I(1/3))
+			p<-p+geom_density(aes(x=fpkm,group=condition,color=condition,fill=condition),alpha=I(1/3))
 		}
 	
 	p<-p + opts(title=object@tables$mainTable)
@@ -305,7 +499,7 @@ setMethod("csDensity",signature(object="CuffData"),.density)
 
 setMethod("csScatter",signature(object="CuffData"), .scatter)
 
-.volcano<-function(object,x,y,features=FALSE,xlimits=c(-20,20),...){
+.volcano<-function(object,x,y,alpha=0.05,showSignificant=TRUE,features=FALSE,xlimits=c(-20,20),...){
 	samp<-samples(object)
 	
 	#check to make sure x and y are in samples
@@ -318,12 +512,17 @@ setMethod("csScatter",signature(object="CuffData"), .scatter)
 	#subset dat for samples of interest
 	mySamples<-c(x,y)
 	dat<-dat[(dat$sample_1 %in% mySamples & dat$sample_2 %in% mySamples),]
+	dat$significant <- 'no'
+	dat$significant[dat$q_value<=alpha]<-'yes'
 	s1<-unique(dat$sample_1)
 	s2<-unique(dat$sample_2)
 	
 	p<-ggplot(dat)
-	p<- p + geom_point(aes(x=log2_fold_change,y=-log10(p_value),color=significant),size=0.8)
-	
+	if(showSignificant){
+		p<- p + geom_point(aes(x=log2_fold_change,y=-log10(p_value),color=significant),size=0.8)
+	}else{
+		p<- p + geom_point(aes(x=log2_fold_change,y=-log10(p_value)),size=0.8)
+	}
 	#Add title and return
 	p<- p + opts(title=paste(object@tables$mainTable,": ",s2,"/",s1,sep=""))
 	p<- p + scale_colour_manual(values=c("red", "steelblue"))
@@ -338,15 +537,21 @@ setMethod("csScatter",signature(object="CuffData"), .scatter)
 
 setMethod("csVolcano",signature(object="CuffData"), .volcano)
 
-.boxplot<-function(object,logMode=TRUE,pseudocount=0.0001,...){
-	dat<-fpkm(object)
+.boxplot<-function(object,logMode=TRUE,pseudocount=0.0001,replicates=FALSE,...){
+	if(replicates){
+		dat<-repFpkm(object)
+		colnames(dat)[colnames(dat)=="rep_name"]<-"condition"
+	}else{
+		dat<-fpkm(object)
+		colnames(dat)[colnames(dat)=="sample_name"]<-"condition"
+	}
 	if(logMode) {
 		dat$fpkm<-dat$fpkm+pseudocount
 		p<-ggplot(dat)
-		p<-p+geom_boxplot(aes(x=sample_name,y=log10(fpkm),fill=sample_name),size=0.3,alpha=I(1/3))
+		p<-p+geom_boxplot(aes(x=condition,y=log10(fpkm),fill=condition),size=0.3,alpha=I(1/3))
 	} else {
 		p <- ggplot(dat)
-		p<-p+geom_boxplot(aes(x=sample_name,y=fpkm,fill=sample_name),alpha=I(1/3),size=0.3)
+		p<-p+geom_boxplot(aes(x=condition,y=fpkm,fill=condition),alpha=I(1/3),size=0.3)
 	}
 	p<- p + opts(axis.text.x=theme_text(angle=-90, hjust=0))
 	
@@ -358,8 +563,12 @@ setMethod("csVolcano",signature(object="CuffData"), .volcano)
 
 setMethod("csBoxplot",signature(object="CuffData"),.boxplot)
 
-.dendro<-function(object,logMode=T,pseudocount=1){
-	fpkmMat<-fpkmMatrix(object)
+.dendro<-function(object,logMode=T,pseudocount=1,replicates=FALSE){
+	if(replicates){
+		fpkmMat<-repFpkmMatrix(object)
+	}else{
+		fpkmMat<-fpkmMatrix(object)
+	}
 	if(logMode){
 		fpkmMat<-log10(fpkmMat+pseudocount)
 	}
@@ -374,8 +583,12 @@ setMethod("csBoxplot",signature(object="CuffData"),.boxplot)
 
 setMethod("csDendro",signature(object="CuffData"),.dendro)
 
-.MAplot<-function(object,x,y,logMode=T,pseudocount=1,smooth=F){
-	dat<-.getMA(object,x,y,logMode=logMode,pseudocount=pseudocount)
+.MAplot<-function(object,x,y,logMode=T,pseudocount=1,smooth=FALSE,useCount=FALSE){
+	if(useCount){
+		dat<-.getCountMA(object,x,y,logMode=logMode,pseudocount=pseudocount)
+	}else{
+		dat<-.getMA(object,x,y,logMode=logMode,pseudocount=pseudocount)
+	}
 	p<-ggplot(dat)
 	p<-p+geom_point(aes(x=A,y=log2(M)))
 	
@@ -390,6 +603,15 @@ setMethod("csDendro",signature(object="CuffData"),.dendro)
 }
 
 setMethod("MAplot",signature(object="CuffData"),.MAplot)
+
+.dispersionPlot<-function(object){
+	dat<-count(object)
+	p<-ggplot(dat)
+	p<-p+geom_point(aes(x=count,y=dispersion,color=sample_name)) + scale_x_log10() + scale_y_log10()
+	p
+}
+
+setMethod("dispersionPlot",signature(object="CuffData"),.dispersionPlot)
 
 #############
 # Other Methods
@@ -414,3 +636,30 @@ setMethod("MAplot",signature(object="CuffData"),.MAplot)
 
 setMethod("csSpecificity",signature(object="CuffData"),.specificity)
 
+.makeRNK<-function(object,x,y,filename){
+	#This will make a .rnk file for GSEA pre-ranked analysis using the log2_fold_change value from diffData.  Writes to 'filename'
+	
+}
+
+
+
+#############
+#Utility functions
+#############
+.checkSamples<-function(dbConn,sampleIdList){
+	dbSamples<-dbReadTable(dbConn,"samples")
+	if (all(sampleIdList %in% dbSamples$sample_name)){
+		return(TRUE)
+	}else{
+		return(FALSE)
+	}
+}
+
+.checkReps<-function(dbConn,repIdList){
+	dbReps<-dbReadTable(dbConn,"replicates")
+	if (all(repIdList %in% dbReps$rep_name)){
+		return(TRUE)
+	}else{
+		return(FALSE)
+	}
+}
