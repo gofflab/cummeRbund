@@ -59,6 +59,9 @@ loadRepTable<-function(repTableFile,
 	full = as.data.frame(do.call(read.table,fileArgs))
 	#print(head(full))
 	
+	#Fix sample_names
+	full$condition<-make.db.names(dbConn,as.character(full$condition),unique=FALSE)
+	
 	#Parsing
 	#For now, I need to concatenate condition and replicate number
 	full$rep_name<-paste(full$condition,full$replicate_num,sep="_")
@@ -239,40 +242,44 @@ loadGenes<-function(fpkmFile,
 		countArgs$file = countFile
 		counts<-as.data.frame(do.call(read.table,countArgs))
 		
-		#Reshape geneCount table
-		write("Reshaping geneCount table",stderr())
-		countmelt<-melt(counts,id.vars=c("tracking_id"),measure.vars=-idCols)
-		colnames(countmelt)[colnames(countmelt)=='variable']<-'sample_name'
-		
-		countmelt$measurement = ""
-		
-		countmelt$measurement[grepl("_count$",countmelt$sample_name)] = "count"
-		countmelt$measurement[grepl("_count_variance$",countmelt$sample_name)] = "variance"
-		countmelt$measurement[grepl("_count_uncertainty_var$",countmelt$sample_name)] = "uncertainty"
-		countmelt$measurement[grepl("_count_dispersion_var$",countmelt$sample_name)] = "dispersion"
-		countmelt$measurement[grepl("_status$",countmelt$sample_name)] = "status"
-		
-		countmelt$sample_name<-gsub("_count$","",countmelt$sample_name)
-		countmelt$sample_name<-gsub("_count_variance$","",countmelt$sample_name)
-		countmelt$sample_name<-gsub("_count_uncertainty_var$","",countmelt$sample_name)
-		countmelt$sample_name<-gsub("_count_dispersion_var$","",countmelt$sample_name)
-		countmelt$sample_name<-gsub("_status$","",countmelt$sample_name)
-		
-		#Adjust sample names with make.db.names
-		countmelt$sample_name <- make.db.names(dbConn,as.vector(countmelt$sample_name),unique=FALSE)
-		
-		#Recast
-		write("Recasting",stderr())
-		countmelt<-as.data.frame(dcast(countmelt,...~measurement))
-		
-		#debugging
-		#write(colnames(countmelt),stderr())
-		
-
-		#Write geneCount table
-		write("Writing geneCount table",stderr())
-		insert_SQL<-'INSERT INTO geneCount VALUES(:tracking_id,:sample_name,:count,:variance,:uncertainty,:dispersion,:status)'
-		bulk_insert(dbConn,insert_SQL,countmelt)
+		if(dim(counts)[1]>0){
+			#Reshape geneCount table
+			write("Reshaping geneCount table",stderr())
+			countmelt<-melt(counts,id.vars=c("tracking_id"),measure.vars=-idCols)
+			colnames(countmelt)[colnames(countmelt)=='variable']<-'sample_name'
+			
+			countmelt$measurement = ""
+			
+			countmelt$measurement[grepl("_count$",countmelt$sample_name)] = "count"
+			countmelt$measurement[grepl("_count_variance$",countmelt$sample_name)] = "variance"
+			countmelt$measurement[grepl("_count_uncertainty_var$",countmelt$sample_name)] = "uncertainty"
+			countmelt$measurement[grepl("_count_dispersion_var$",countmelt$sample_name)] = "dispersion"
+			countmelt$measurement[grepl("_status$",countmelt$sample_name)] = "status"
+			
+			countmelt$sample_name<-gsub("_count$","",countmelt$sample_name)
+			countmelt$sample_name<-gsub("_count_variance$","",countmelt$sample_name)
+			countmelt$sample_name<-gsub("_count_uncertainty_var$","",countmelt$sample_name)
+			countmelt$sample_name<-gsub("_count_dispersion_var$","",countmelt$sample_name)
+			countmelt$sample_name<-gsub("_status$","",countmelt$sample_name)
+			
+			#Adjust sample names with make.db.names
+			countmelt$sample_name <- make.db.names(dbConn,as.vector(countmelt$sample_name),unique=FALSE)
+			
+			#Recast
+			write("Recasting",stderr())
+			countmelt<-as.data.frame(dcast(countmelt,...~measurement))
+			
+			#debugging
+			#write(colnames(countmelt),stderr())
+			
+	
+			#Write geneCount table
+			write("Writing geneCount table",stderr())
+			insert_SQL<-'INSERT INTO geneCount VALUES(:tracking_id,:sample_name,:count,:variance,:uncertainty,:dispersion,:status)'
+			bulk_insert(dbConn,insert_SQL,countmelt)
+		}else{
+			write(paste("No records found in", countFile),stderr())
+		}
 		
 	}
 		
@@ -289,14 +296,22 @@ loadGenes<-function(fpkmFile,
 		reps<-as.data.frame(do.call(read.table,replicateArgs))
 		#print(head(reps))
 		
-		#Create unique rep name
-		reps$rep_name<-paste(reps$condition,reps$replicate,sep="_")
-		colnames(reps)[colnames(reps)=="condition"]<-"sample_name"
+		if(dim(reps)[1]>0){
 		
-		#Write geneReplicateData table
-		write("Writing geneReplicateData table",stderr())
-		insert_SQL<-'INSERT INTO geneReplicateData VALUES(:tracking_id,:sample_name,:replicate,:rep_name,:raw_frags,:internal_scaled_frags,:external_scaled_frags,:FPKM,:effective_length,:status)'
-		bulk_insert(dbConn,insert_SQL,reps)
+			#Adjust sample names with make.db.names
+			reps$condition <- make.db.names(dbConn,as.character(reps$condition),unique=FALSE)
+		
+			#Create unique rep name
+			reps$rep_name<-paste(reps$condition,reps$replicate,sep="_")
+			colnames(reps)[colnames(reps)=="condition"]<-"sample_name"
+			
+			#Write geneReplicateData table
+			write("Writing geneReplicateData table",stderr())
+			insert_SQL<-'INSERT INTO geneReplicateData VALUES(:tracking_id,:sample_name,:replicate,:rep_name,:raw_frags,:internal_scaled_frags,:external_scaled_frags,:FPKM,:effective_length,:status)'
+			bulk_insert(dbConn,insert_SQL,reps)
+		}else{
+			write(paste("No records found in", replicateFile),stderr())
+		}
 		
 	}
 	
@@ -443,42 +458,46 @@ loadIsoforms<-function(fpkmFile,
 		countArgs$file = countFile
 		counts<-as.data.frame(do.call(read.table,countArgs))
 		
-		#Reshape isoformCount table
-		write("Reshaping isoformCount table",stderr())
-		countmelt<-melt(counts,id.vars=c("tracking_id"),measure.vars=-idCols)
-		colnames(countmelt)[colnames(countmelt)=='variable']<-'sample_name'
+		if(dim(counts)[1]>0){
 		
-		countmelt$measurement = ""
-		
-		countmelt$measurement[grepl("_count$",countmelt$sample_name)] = "count"
-		countmelt$measurement[grepl("_count_variance$",countmelt$sample_name)] = "variance"
-		countmelt$measurement[grepl("_count_uncertainty_var$",countmelt$sample_name)] = "uncertainty"
-		countmelt$measurement[grepl("_count_dispersion_var$",countmelt$sample_name)] = "dispersion"
-		countmelt$measurement[grepl("_status$",countmelt$sample_name)] = "status"
-		
-		countmelt$sample_name<-gsub("_count$","",countmelt$sample_name)
-		countmelt$sample_name<-gsub("_count_variance$","",countmelt$sample_name)
-		countmelt$sample_name<-gsub("_count_uncertainty_var$","",countmelt$sample_name)
-		countmelt$sample_name<-gsub("_count_dispersion_var$","",countmelt$sample_name)
-		countmelt$sample_name<-gsub("_status$","",countmelt$sample_name)
-		
-		#Adjust sample names with make.db.names
-		countmelt$sample_name <- make.db.names(dbConn,as.vector(countmelt$sample_name),unique=FALSE)
-		
-		
-		#Recast
-		write("Recasting",stderr())
-		countmelt<-as.data.frame(dcast(countmelt,...~measurement))
-		
-		#debugging
-		#write(colnames(countmelt),stderr())
-		
-		
-		#Write isoformCount table
-		write("Writing isoformCount table",stderr())
-		insert_SQL<-'INSERT INTO isoformCount VALUES(:tracking_id,:sample_name,:count,:variance,:uncertainty,:dispersion,:status)'
-		bulk_insert(dbConn,insert_SQL,countmelt)
-		
+			#Reshape isoformCount table
+			write("Reshaping isoformCount table",stderr())
+			countmelt<-melt(counts,id.vars=c("tracking_id"),measure.vars=-idCols)
+			colnames(countmelt)[colnames(countmelt)=='variable']<-'sample_name'
+			
+			countmelt$measurement = ""
+			
+			countmelt$measurement[grepl("_count$",countmelt$sample_name)] = "count"
+			countmelt$measurement[grepl("_count_variance$",countmelt$sample_name)] = "variance"
+			countmelt$measurement[grepl("_count_uncertainty_var$",countmelt$sample_name)] = "uncertainty"
+			countmelt$measurement[grepl("_count_dispersion_var$",countmelt$sample_name)] = "dispersion"
+			countmelt$measurement[grepl("_status$",countmelt$sample_name)] = "status"
+			
+			countmelt$sample_name<-gsub("_count$","",countmelt$sample_name)
+			countmelt$sample_name<-gsub("_count_variance$","",countmelt$sample_name)
+			countmelt$sample_name<-gsub("_count_uncertainty_var$","",countmelt$sample_name)
+			countmelt$sample_name<-gsub("_count_dispersion_var$","",countmelt$sample_name)
+			countmelt$sample_name<-gsub("_status$","",countmelt$sample_name)
+			
+			#Adjust sample names with make.db.names
+			countmelt$sample_name <- make.db.names(dbConn,as.vector(countmelt$sample_name),unique=FALSE)
+			
+			
+			#Recast
+			write("Recasting",stderr())
+			countmelt<-as.data.frame(dcast(countmelt,...~measurement))
+			
+			#debugging
+			#write(colnames(countmelt),stderr())
+			
+			
+			#Write isoformCount table
+			write("Writing isoformCount table",stderr())
+			insert_SQL<-'INSERT INTO isoformCount VALUES(:tracking_id,:sample_name,:count,:variance,:uncertainty,:dispersion,:status)'
+			bulk_insert(dbConn,insert_SQL,countmelt)
+		}else{
+			write(paste("No records found in",countFile),stderr())
+		}
 	}
 	
 	
@@ -494,15 +513,22 @@ loadIsoforms<-function(fpkmFile,
 		reps<-as.data.frame(do.call(read.table,replicateArgs))
 		#print(head(reps))
 		
-		#Create unique rep name
-		reps$rep_name<-paste(reps$condition,reps$replicate,sep="_")
-		colnames(reps)[colnames(reps)=="condition"]<-"sample_name"
+		if(dim(reps)[1]>0){
+			
+			#Adjust sample names with make.db.names
+			reps$condition <- make.db.names(dbConn,as.character(reps$condition),unique=FALSE)
 		
-		#Write isoformReplicateData table
-		write("Writing isoformReplicateData table",stderr())
-		insert_SQL<-'INSERT INTO isoformReplicateData VALUES(:tracking_id,:sample_name,:replicate,:rep_name,:raw_frags,:internal_scaled_frags,:external_scaled_frags,:FPKM,:effective_length,:status)'
-		bulk_insert(dbConn,insert_SQL,reps)
-		
+			#Create unique rep name
+			reps$rep_name<-paste(reps$condition,reps$replicate,sep="_")
+			colnames(reps)[colnames(reps)=="condition"]<-"sample_name"
+			
+			#Write isoformReplicateData table
+			write("Writing isoformReplicateData table",stderr())
+			insert_SQL<-'INSERT INTO isoformReplicateData VALUES(:tracking_id,:sample_name,:replicate,:rep_name,:raw_frags,:internal_scaled_frags,:external_scaled_frags,:FPKM,:effective_length,:status)'
+			bulk_insert(dbConn,insert_SQL,reps)
+		}else{
+			write(paste("No records found in",replicateFile),stderr())
+		}	
 	}
 	
 }
@@ -669,42 +695,46 @@ loadTSS<-function(fpkmFile,
 		countArgs$file = countFile
 		counts<-as.data.frame(do.call(read.table,countArgs))
 		
-		#Reshape TSSCount table
-		write("Reshaping TSSCount table",stderr())
-		countmelt<-melt(counts,id.vars=c("tracking_id"),measure.vars=-idCols)
-		colnames(countmelt)[colnames(countmelt)=='variable']<-'sample_name'
+		if(dim(counts)[1]>0){
 		
-		countmelt$measurement = ""
-		
-		countmelt$measurement[grepl("_count$",countmelt$sample_name)] = "count"
-		countmelt$measurement[grepl("_count_variance$",countmelt$sample_name)] = "variance"
-		countmelt$measurement[grepl("_count_uncertainty_var$",countmelt$sample_name)] = "uncertainty"
-		countmelt$measurement[grepl("_count_dispersion_var$",countmelt$sample_name)] = "dispersion"
-		countmelt$measurement[grepl("_status$",countmelt$sample_name)] = "status"
-		
-		countmelt$sample_name<-gsub("_count$","",countmelt$sample_name)
-		countmelt$sample_name<-gsub("_count_variance$","",countmelt$sample_name)
-		countmelt$sample_name<-gsub("_count_uncertainty_var$","",countmelt$sample_name)
-		countmelt$sample_name<-gsub("_count_dispersion_var$","",countmelt$sample_name)
-		countmelt$sample_name<-gsub("_status$","",countmelt$sample_name)
-		
-		#Adjust sample names with make.db.names
-		countmelt$sample_name <- make.db.names(dbConn,as.vector(countmelt$sample_name),unique=FALSE)
-		
-		
-		#Recast
-		write("Recasting",stderr())
-		countmelt<-as.data.frame(dcast(countmelt,...~measurement))
-		
-		#debugging
-		#write(colnames(countmelt),stderr())
-		
-		
-		#Write TSSCount table
-		write("Writing TSSCount table",stderr())
-		insert_SQL<-'INSERT INTO TSSCount VALUES(:tracking_id,:sample_name,:count,:variance,:uncertainty,:dispersion,:status)'
-		bulk_insert(dbConn,insert_SQL,countmelt)
-		
+			#Reshape TSSCount table
+			write("Reshaping TSSCount table",stderr())
+			countmelt<-melt(counts,id.vars=c("tracking_id"),measure.vars=-idCols)
+			colnames(countmelt)[colnames(countmelt)=='variable']<-'sample_name'
+			
+			countmelt$measurement = ""
+			
+			countmelt$measurement[grepl("_count$",countmelt$sample_name)] = "count"
+			countmelt$measurement[grepl("_count_variance$",countmelt$sample_name)] = "variance"
+			countmelt$measurement[grepl("_count_uncertainty_var$",countmelt$sample_name)] = "uncertainty"
+			countmelt$measurement[grepl("_count_dispersion_var$",countmelt$sample_name)] = "dispersion"
+			countmelt$measurement[grepl("_status$",countmelt$sample_name)] = "status"
+			
+			countmelt$sample_name<-gsub("_count$","",countmelt$sample_name)
+			countmelt$sample_name<-gsub("_count_variance$","",countmelt$sample_name)
+			countmelt$sample_name<-gsub("_count_uncertainty_var$","",countmelt$sample_name)
+			countmelt$sample_name<-gsub("_count_dispersion_var$","",countmelt$sample_name)
+			countmelt$sample_name<-gsub("_status$","",countmelt$sample_name)
+			
+			#Adjust sample names with make.db.names
+			countmelt$sample_name <- make.db.names(dbConn,as.vector(countmelt$sample_name),unique=FALSE)
+			
+			
+			#Recast
+			write("Recasting",stderr())
+			countmelt<-as.data.frame(dcast(countmelt,...~measurement))
+			
+			#debugging
+			#write(colnames(countmelt),stderr())
+			
+			
+			#Write TSSCount table
+			write("Writing TSSCount table",stderr())
+			insert_SQL<-'INSERT INTO TSSCount VALUES(:tracking_id,:sample_name,:count,:variance,:uncertainty,:dispersion,:status)'
+			bulk_insert(dbConn,insert_SQL,countmelt)
+		}else{
+			write(paste("No records found in",countFile),stderr())
+		}
 	}
 	
 	
@@ -720,14 +750,22 @@ loadTSS<-function(fpkmFile,
 		reps<-as.data.frame(do.call(read.table,replicateArgs))
 		#print(head(reps))
 		
-		#Create unique rep name
-		reps$rep_name<-paste(reps$condition,reps$replicate,sep="_")
-		colnames(reps)[colnames(reps)=="condition"]<-"sample_name"
+		if(dim(reps)[1]>0){
+				
+			#Adjust sample names with make.db.names
+			reps$condition <- make.db.names(dbConn,as.character(reps$condition),unique=FALSE)
 		
-		#Write TSSReplicateData table
-		write("Writing TSSReplicateData table",stderr())
-		insert_SQL<-'INSERT INTO TSSReplicateData VALUES(:tracking_id,:sample_name,:replicate,:rep_name,:raw_frags,:internal_scaled_frags,:external_scaled_frags,:FPKM,:effective_length,:status)'
-		bulk_insert(dbConn,insert_SQL,reps)
+			#Create unique rep name
+			reps$rep_name<-paste(reps$condition,reps$replicate,sep="_")
+			colnames(reps)[colnames(reps)=="condition"]<-"sample_name"
+			
+			#Write TSSReplicateData table
+			write("Writing TSSReplicateData table",stderr())
+			insert_SQL<-'INSERT INTO TSSReplicateData VALUES(:tracking_id,:sample_name,:replicate,:rep_name,:raw_frags,:internal_scaled_frags,:external_scaled_frags,:FPKM,:effective_length,:status)'
+			bulk_insert(dbConn,insert_SQL,reps)
+		}else{
+			write(paste("No records found in",replicateFile),stderr())
+		}
 		
 	}
 	
@@ -897,42 +935,46 @@ loadCDS<-function(fpkmFile,
 		countArgs$file = countFile
 		counts<-as.data.frame(do.call(read.table,countArgs))
 		
-		#Reshape CDSCount table
-		write("Reshaping CDSCount table",stderr())
-		countmelt<-melt(counts,id.vars=c("tracking_id"),measure.vars=-idCols)
-		colnames(countmelt)[colnames(countmelt)=='variable']<-'sample_name'
+		if(dim(counts)[1]>0){
 		
-		countmelt$measurement = ""
-		
-		countmelt$measurement[grepl("_count$",countmelt$sample_name)] = "count"
-		countmelt$measurement[grepl("_count_variance$",countmelt$sample_name)] = "variance"
-		countmelt$measurement[grepl("_count_uncertainty_var$",countmelt$sample_name)] = "uncertainty"
-		countmelt$measurement[grepl("_count_dispersion_var$",countmelt$sample_name)] = "dispersion"
-		countmelt$measurement[grepl("_status$",countmelt$sample_name)] = "status"
-		
-		countmelt$sample_name<-gsub("_count$","",countmelt$sample_name)
-		countmelt$sample_name<-gsub("_count_variance$","",countmelt$sample_name)
-		countmelt$sample_name<-gsub("_count_uncertainty_var$","",countmelt$sample_name)
-		countmelt$sample_name<-gsub("_count_dispersion_var$","",countmelt$sample_name)
-		countmelt$sample_name<-gsub("_status$","",countmelt$sample_name)
-		
-		#Adjust sample names with make.db.names
-		countmelt$sample_name <- make.db.names(dbConn,as.vector(countmelt$sample_name),unique=FALSE)
-		
-		
-		#Recast
-		write("Recasting",stderr())
-		countmelt<-as.data.frame(dcast(countmelt,...~measurement))
-		
-		#debugging
-		#write(colnames(countmelt),stderr())
-		
-		
-		#Write CDSCount table
-		write("Writing CDSCount table",stderr())
-		insert_SQL<-'INSERT INTO CDSCount VALUES(:tracking_id,:sample_name,:count,:variance,:uncertainty,:dispersion,:status)'
-		bulk_insert(dbConn,insert_SQL,countmelt)
-		
+			#Reshape CDSCount table
+			write("Reshaping CDSCount table",stderr())
+			countmelt<-melt(counts,id.vars=c("tracking_id"),measure.vars=-idCols)
+			colnames(countmelt)[colnames(countmelt)=='variable']<-'sample_name'
+			
+			countmelt$measurement = ""
+			
+			countmelt$measurement[grepl("_count$",countmelt$sample_name)] = "count"
+			countmelt$measurement[grepl("_count_variance$",countmelt$sample_name)] = "variance"
+			countmelt$measurement[grepl("_count_uncertainty_var$",countmelt$sample_name)] = "uncertainty"
+			countmelt$measurement[grepl("_count_dispersion_var$",countmelt$sample_name)] = "dispersion"
+			countmelt$measurement[grepl("_status$",countmelt$sample_name)] = "status"
+			
+			countmelt$sample_name<-gsub("_count$","",countmelt$sample_name)
+			countmelt$sample_name<-gsub("_count_variance$","",countmelt$sample_name)
+			countmelt$sample_name<-gsub("_count_uncertainty_var$","",countmelt$sample_name)
+			countmelt$sample_name<-gsub("_count_dispersion_var$","",countmelt$sample_name)
+			countmelt$sample_name<-gsub("_status$","",countmelt$sample_name)
+			
+			#Adjust sample names with make.db.names
+			countmelt$sample_name <- make.db.names(dbConn,as.vector(countmelt$sample_name),unique=FALSE)
+			
+			
+			#Recast
+			write("Recasting",stderr())
+			countmelt<-as.data.frame(dcast(countmelt,...~measurement))
+			
+			#debugging
+			#write(colnames(countmelt),stderr())
+			
+			
+			#Write CDSCount table
+			write("Writing CDSCount table",stderr())
+			insert_SQL<-'INSERT INTO CDSCount VALUES(:tracking_id,:sample_name,:count,:variance,:uncertainty,:dispersion,:status)'
+			bulk_insert(dbConn,insert_SQL,countmelt)
+		}else{
+			write(paste("No records found in",countFile),stderr())
+		}
 	}
 	
 	
@@ -948,14 +990,22 @@ loadCDS<-function(fpkmFile,
 		reps<-as.data.frame(do.call(read.table,replicateArgs))
 		#print(head(reps))
 		
-		#Create unique rep name
-		reps$rep_name<-paste(reps$condition,reps$replicate,sep="_")
-		colnames(reps)[colnames(reps)=="condition"]<-"sample_name"
+		if(dim(reps)[1]>0){
+				
+			#Adjust sample names with make.db.names
+			reps$condition <- make.db.names(dbConn,as.character(reps$condition),unique=FALSE)
 		
-		#Write CDSReplicateData table
-		write("Writing CDSReplicateData table",stderr())
-		insert_SQL<-'INSERT INTO CDSReplicateData VALUES(:tracking_id,:sample_name,:replicate,:rep_name,:raw_frags,:internal_scaled_frags,:external_scaled_frags,:FPKM,:effective_length,:status)'
-		bulk_insert(dbConn,insert_SQL,reps)
+			#Create unique rep name
+			reps$rep_name<-paste(reps$condition,reps$replicate,sep="_")
+			colnames(reps)[colnames(reps)=="condition"]<-"sample_name"
+			
+			#Write CDSReplicateData table
+			write("Writing CDSReplicateData table",stderr())
+			insert_SQL<-'INSERT INTO CDSReplicateData VALUES(:tracking_id,:sample_name,:replicate,:rep_name,:raw_frags,:internal_scaled_frags,:external_scaled_frags,:FPKM,:effective_length,:status)'
+			bulk_insert(dbConn,insert_SQL,reps)
+		}else{
+			write(paste("No records found in",replicateFile),stderr())
+		}
 		
 	}
 	
