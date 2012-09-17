@@ -1,3 +1,29 @@
+v1.99.3
+	New Features:
+		- Added diffTable() method to return a table of differential results broken out by pairwise comparison. (more human-readable)
+		- Added sigMatrix() method to CuffSet objects to draw heatmap showing number of significant genes by pairwise comparison at a given FDR.
+		- A call to fpkm() now emits calculated (model-derived) standard deviation field as well.
+		- Can now pass a GTF file as argument to readCufflinks() to integrate transcript model information into database backend
+			* Added requirement for rtracklayer and GenomicFeatures packages.
+			* You must also indicate which genome build the .gtf was created against by using the 'genome' argument to readCufflinks.
+		- Integration with Gviz:
+			* CuffGene objects now have a makeGeneRegionTrack() argument to create a GeneRegionTrack() from transcript model information
+			* Can also make GRanges object
+			* ONLY WORKS IF YOU READ .gtf FILE IN WITH readCufflinks()
+		- Added csScatterMatrix() and csVolcanoMatrix() method to CuffData objects.
+		- Added fpkmSCVPlot() as a CuffData method to visualize replicate-level coefficient of variation across fpkm range per condition.
+		- Added PCAplot() and MDSplot() for dimensionality reduction visualizations (Principle components, and multi-dimensional scaling respectively)
+		- Added csDistHeat() to create a heatmap of JS-distances between conditions.  
+		
+	Bugfixes:
+		- Fixed diffData 'features' argument so that it now does what it's supposed to do.
+		- added DB() with signature(object="CuffSet") to NAMESPACE
+		
+	Notes:
+		- Once again, there have been modifications to the underlying database schema so you will have to re-run readCufflinks(rebuild=T) to re-analyze existing datasets.
+		- Importing 'defaults' from plyr instead of requiring entire package (keeps namespace cleaner).
+		- Set pseudocount=0.0 as default for csDensity() and csScatter() methods (This prevents a visual bias for genes with FPKM <1 and ggplot2 handles removing true zero values).
+		
 v1.99.2
 	Bugfixes:
 		- Fixed bug in replicate table that did not apply make.db.names to match samples table.

@@ -55,13 +55,15 @@ setClass("CuffFeature",
 						fpkm="data.frame",
 						diff="data.frame",
 						repFpkm="data.frame",
-						count="data.frame"
+						count="data.frame",
+						genome="character"
 				)
 		)
 
 #CuffGene is a 'data' container for all information linked to a single 'gene_id'
 setClass("CuffGene",
 		representation(id = "character",
+						features = "data.frame",
 						isoforms = "CuffFeature",
 						TSS = "CuffFeature",
 						CDS = "CuffFeature",
@@ -79,7 +81,8 @@ setClass("CuffFeatureSet",
 				fpkm="data.frame",
 				diff="data.frame",
 				repFpkm="data.frame",
-				count="data.frame"
+				count="data.frame",
+				genome="character"
 			)
 )
 

@@ -57,6 +57,10 @@ setMethod("length","CuffFeatureSet",
 			dim(x@annotation)[1]
 		}
 )
+
+#Add dim method so you can find number of samples in CuffFeatureSet, not just number of genes
+
+
 #################
 #Subsetting		#
 #################
@@ -84,19 +88,23 @@ setMethod("samples","CuffFeatureSet",.samples)
 setMethod("replicates","CuffFeatureSet",.replicates)
 
 .fpkm<-function(object,features=FALSE){
+	myFPKM<-object@fpkm
+	myFPKM$stdev<-(myFPKM$conf_hi-myFPKM$fpkm)/2
 	if (features){
-		return (merge(object@annotation,object@fpkm))
+		return (merge(object@annotation,myFPKM))
 	}else{
-		return(object@fpkm)
+		return(myFPKM)
 	}
 }
 setMethod("fpkm",signature(object="CuffFeatureSet"),.fpkm)
 
 .repFpkm<-function(object,features=FALSE){
+	myFPKM<-object@repFpkm
+	#myFPKM$stdev<-(myFPKM$conf_hi-myFPKM$fpkm)/2
 	if (features){
-		return (merge(object@annotation,object@repFpkm))
+		return (merge(object@annotation,myFPKM))
 	}else{
-		return(object@repFpkm)
+		return(myFPKM)
 	}
 }
 setMethod("repFpkm",signature(object="CuffFeatureSet"),.repFpkm)
@@ -206,6 +214,37 @@ setMethod("repFpkmMatrix",signature(object="CuffFeatureSet"),.repFpkmMatrix)
 
 setMethod("countMatrix",signature(object="CuffFeatureSet"),.countMatrix)
 
+.repCountMatrix<-function(object,fullnames=FALSE,repIdList){
+	#Sample subsetting
+	if(!missing(repIdList)){
+		if (!all(repIdList %in% replicates(object))){
+			stop("Replicate does not exist!")
+		}else{
+			myReps<-repIdList
+		}
+	}else{
+		myReps<-replicates(object)
+	}
+	if(fullnames){
+		res<-repFpkm(object,features=TRUE)
+		res$tracking_id<-paste(res$gene_short_name,res[,1],sep="|")
+	}else{
+		res<-repFpkm(object)
+		colnames(res)[1]<-"tracking_id"	
+	}
+	selectedRows<-c('tracking_id','rep_name','external_scaled_frags')
+	res<-res[,selectedRows]
+	res<-melt(res)
+	res<-dcast(res,tracking_id~rep_name)
+	res<-data.frame(res[,-1],row.names=res[,1])
+	if(!missing(repIdList)){
+		res<-res[,myReps]
+	}
+	res
+}
+
+setMethod("repCountMatrix",signature(object="CuffFeatureSet"),.repCountMatrix)
+
 .diffData<-function(object){
 	return(object@diff)
 }
@@ -237,7 +276,7 @@ setMethod("annotation","CuffFeatureSet",function(object){
 	}
 	colnames(dat)[1] <- "tracking_id"
 	p<-ggplot(dat)
-	p <- p + geom_tile(aes(x=tracking_id,y=sample_name,fill=fpkm)) + scale_fill_gradient(low="white",high="red") + opts(axis.text.x=theme_text(angle=-90, hjust=0))
+	p <- p + geom_tile(aes(x=tracking_id,y=sample_name,fill=fpkm)) + scale_fill_gradient(low="white",high="red") + theme(axis.text.x=element_text(angle=-90, hjust=0))
 	p
 }
 
@@ -348,15 +387,15 @@ setMethod("annotation","CuffFeatureSet",function(object){
 	}
 	
 	# Get rid of the ticks, they get way too dense with lots of rows
-    g2 <- g2 + opts(axis.ticks = theme_blank()) 
+    g2 <- g2 + theme(axis.ticks = element_blank()) 
 
 	## get rid of grey panel background and gridlines
 	
-	g2=g2+opts(panel.grid.minor=theme_line(colour=NA), panel.grid.major=theme_line(colour=NA),
-			panel.background=theme_rect(fill=NA, colour=NA))
+	g2=g2+theme(panel.grid.minor=element_line(colour=NA), panel.grid.major=element_line(colour=NA),
+			panel.background=element_rect(fill=NA, colour=NA))
 	
 	##adjust x-axis labels
-	g2=g2+opts(axis.text.x=theme_text(angle=-90, hjust=0))
+	g2=g2+theme(axis.text.x=element_text(angle=-90, hjust=0))
 
     #write(paste(c("Length of heatscale is :", length(heatscale))), stderr())
 	
@@ -373,7 +412,7 @@ setMethod("annotation","CuffFeatureSet",function(object){
 	} else if (length(heatscale) == 3) {
 	    if (is.null(heatMidpoint))
 	    {
-	        heatMidpoint = (max(m) - min(m)) / 2.0
+	        heatMidpoint = (max(m) + min(m)) / 2.0
 	        #write(heatMidpoint, stderr())
 	    }
 
@@ -390,8 +429,65 @@ setMethod("annotation","CuffFeatureSet",function(object){
 
 setMethod("csHeatmap",signature("CuffFeatureSet"),.ggheat)
 
+
+# Distance Heatmaps
+.distheat<-function(object, samples.not.genes=T, logMode=T, pseudocount=1.0, heatscale=c(low='lightyellow',mid='orange',high='darkred'), heatMidpoint=NULL, ...) {
+  # get expression from a sample or gene perspective
+  if(samples.not.genes) {
+    obj.fpkm = fpkmMatrix(object)
+    obj.fpkm.pos = obj.fpkm[rowSums(obj.fpkm)>0,]
+  } else {
+    obj.fpkm = t(fpkmMatrix(object))
+    obj.fpkm.pos = obj.fpkm[,colSums(obj.fpkm)>0]
+  }
+  
+  if(logMode) {
+    obj.fpkm.pos = log10(obj.fpkm.pos+pseudocount)
+  }
+
+  # compute distances
+  obj.dists = JSdist(makeprobs(obj.fpkm.pos))
+  
+  # cluster to order
+  obj.hc = hclust(obj.dists)
+
+  # make data frame
+  dist.df = melt(as.matrix(obj.dists),varnames=c("X1","X2"))
+
+  # initialize
+  g = ggplot(dist.df, aes(x=X1, y=X2, fill=value))
+
+  # draw
+  labels = labels(obj.dists)
+  g = g + geom_tile() + scale_x_discrete("", limits=labels[obj.hc$order]) + scale_y_discrete("", limits=labels[obj.hc$order])
+
+  # roll labels
+  g = g + theme(axis.text.x=element_text(angle=-90, hjust=0), axis.text.y=element_text(angle=0, hjust=1))
+
+  # drop grey panel background and gridlines
+  g = g + theme(panel.grid.minor=element_line(colour=NA), panel.grid.major=element_line(colour=NA), panel.background=element_rect(fill=NA, colour=NA))
+
+  # adjust heat scale
+  if (length(heatscale) == 2) {
+    g = g + scale_fill_gradient(low=heatscale[1], high=heatscale[3], name="JS Distance")
+  }
+  else if (length(heatscale) == 3) {
+    if (is.null(heatMidpoint)) {
+      heatMidpoint = max(obj.dists) / 2.0
+    }
+    g = g + scale_fill_gradient2(low=heatscale[1], mid=heatscale[2], high=heatscale[3], midpoint=heatMidpoint, name="JS Distance")
+  }
+  
+  g <- g + geom_text(aes(label=format(value,digits=3)),size=6)
+  
+  # return
+  g
+}
+
+setMethod("csDistHeat", signature("CuffFeatureSet"), .distheat)
+
 #Scatterplot
-.scatter<-function(object,x,y,logMode=TRUE,pseudocount=1.0,labels, smooth=FALSE,colorByStatus=FALSE,...){
+.scatter<-function(object,x,y,logMode=TRUE,pseudocount=0.0,labels, smooth=FALSE,colorByStatus=FALSE,...){
 	dat<-fpkmMatrix(object)
 	samp<-samples(object)
 	
@@ -442,7 +538,7 @@ setMethod("csHeatmap",signature("CuffFeatureSet"),.ggheat)
     }
 	
 	#Add title & Return value
-	#p<- p + opts(title=object@tables$mainTable)
+	#p<- p + labs(title=object@tables$mainTable)
 	p
 }
 
@@ -470,18 +566,18 @@ setMethod("csScatter",signature(object="CuffFeatureSet"), .scatter)
 	
 	p<-ggplot(dat)
 	if(showSignificant){
-		p<- p + geom_point(aes(x=log2_fold_change,y=-log10(p_value),color=significant),alpha=I(1/3))
+		p<- p + geom_point(aes(x=log2_fold_change,y=-log10(p_value),color=significant),alpha=I(1/3),size=1.2)
 	}else{
-		p<- p + geom_point(aes(x=log2_fold_change,y=-log10(p_value)),alpha=I(1/3))
+		p<- p + geom_point(aes(x=log2_fold_change,y=-log10(p_value)),alpha=I(1/3),size=1.2)
 	}
 	
-	p<- p + opts(title=paste(s2,"/",s1,sep=""))
+	p<- p + labs(title=paste(s2,"/",s1,sep=""))
 	
 	#Set axis limits
 	p<- p + scale_x_continuous(limits=xlimits)
 	
 	#Default cummeRbund colorscheme
-	p<-p + scale_color_hue(l=50,h.start=200)
+	p<-p + scale_colour_manual(values = c("black","red"))
 	
 	p
 }
@@ -547,13 +643,13 @@ setMethod("csVolcano",signature(object="CuffFeatureSet"), .volcano)
 	}
 	#gene_labels = dat$gene_short_name
 	p <- p + scale_x_discrete("",breaks=tracking_ids,labels=gene_labels) + 
-	    opts(axis.text.x=theme_text(hjust=0,angle=-90))
+	    theme(axis.text.x=element_text(hjust=0,angle=-90))
     	
     # p<- p +
     #       geom_bar() +
     #       geom_errorbar(aes(ymin=conf_lo,ymax=conf_hi,group=1),size=0.15) +
     #       facet_wrap('sample_name') +
-    #       opts(axis.text.x=theme_text(hjust=0,angle=-90))
+    #       theme(axis.text.x=element_text(hjust=0,angle=-90))
 	
 	#This does not make immediate sense with the conf_hi and conf_lo values.  Need to figure out appropriate transformation for these
 	#if(logMode)
@@ -566,7 +662,7 @@ setMethod("csVolcano",signature(object="CuffFeatureSet"), .volcano)
         p <- p + ylab("FPKM")
     }
 	
-	#p <- p + opts(legend.position = "none")
+	#p <- p + theme(legend.position = "none")
 	
 	#Default cummeRbund colorscheme
 	p<-p + scale_fill_hue(l=50,h.start=200) + scale_color_hue(l=50,h.start=200)
@@ -676,8 +772,8 @@ setMethod("expressionPlot",signature(object="CuffFeatureSet"),.expressionPlot)
 #	c
 #}
 
-.cluster<-function(object, k, pseudocount=1, ...){
-	library(cluster)
+.cluster<-function(object, k, pseudocount=1,...){
+	require(cluster)
 	m<-as.data.frame(fpkmMatrix(object))
 	m<-m[rowSums(m)>0,]
 	n<-JSdist(makeprobs(t(m)))
@@ -689,6 +785,19 @@ setMethod("expressionPlot",signature(object="CuffFeatureSet"),.expressionPlot)
 }
 
 setMethod("csCluster",signature(object="CuffFeatureSet"),.cluster)
+
+.ratioCluster<-function(object,k,ratioTo=NULL,...){
+	require(cluster)
+	m<-as.data.frame(fpkmMatrix(object))
+	#TODO: ensure that ratioTo is in colnames(fpkmMatrix(object))
+	m.ratio<-m/m[[ratioTo]]
+	m.log.ratio<-log2(m.ratio)
+	n<-dist(m.log.ratio)
+	clusters<-pam(n,k,...)
+	class(clusters)<-"list"
+	clusters$ratio<-m
+	clusters
+}
 
 csClusterPlot<-function(clustering,pseudocount=1.0,drawSummary=TRUE, sumFun=mean_cl_boot){
 	m<-clustering$fpkm+pseudocount
@@ -724,6 +833,18 @@ csClusterPlot<-function(clustering,pseudocount=1.0,drawSummary=TRUE, sumFun=mean
 
 setMethod("csDendro",signature(object="CuffFeatureSet"),.dendro)
 
+#.csNMF<-function(object,rank,method,...){
+#	#Non-negative Matrix Factorization
+#	require(NMF)
+#	#Retrieve FPKM values
+#	fpkms<-fpkmMatrix(object)
+#	
+#	#Remove rows with sum()==0
+#	fpkms<-fpkms[rowSums(fpkms)>0,]
+#	
+#}
+#
+#setMethod("csNMF",signature(object="CuffFeatureSet"),.csNMF)
 
 ##Takes as first argument the object returned from csCluster (a modified 'cluster' list)
 #.clusterPlot<-function(clusters, pseudocount=1, ...){
@@ -740,7 +861,7 @@ setMethod("csDendro",signature(object="CuffFeatureSet"),.dendro)
 #	c
 #}
 
-.density<-function(object, logMode = TRUE, pseudocount=1.0, labels, features=FALSE, replicates=FALSE,...){
+.density<-function(object, logMode = TRUE, pseudocount=0.0, labels, features=FALSE, replicates=FALSE,...){
 	if(replicates){
 		dat<-repFpkm(object,features=features)
 		colnames(dat)[colnames(dat)=="rep_name"]<-"condition"
@@ -756,7 +877,7 @@ setMethod("csDendro",signature(object="CuffFeatureSet"),.dendro)
 		p<-p+geom_density(aes(x=fpkm,group=condition,color=condition,fill=condition),alpha=I(1/3))
 	}
 	
-	#p<-p + opts(title=object@tables$mainTable)
+	#p<-p + labs(title=object@tables$mainTable)
 	
 	#Default cummeRbund colorscheme
 	p<-p + scale_fill_hue(l=50,h.start=200) + scale_color_hue(l=50,h.start=200)

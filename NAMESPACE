@@ -1,6 +1,7 @@
 import(methods)
 
 #importFrom(graphics, plot)
+importFrom(plyr, defaults)
 
 exportClasses(CuffSet,
 			CuffData,
@@ -30,6 +31,7 @@ exportMethods(
 			csVolcano,
 			csBoxplot,
 			csHeatmap,
+            csDistHeat,
 			csCluster,
 			csDendro,
 			MAplot,
@@ -38,7 +40,9 @@ exportMethods(
 			fpkmMatrix,
 			repFpkmMatrix,
 			countMatrix,
+			repCountMatrix,
 			diffData,
+			diffTable,
 			features,
 			featureNames,
 			samples,
@@ -49,12 +53,23 @@ exportMethods(
 			getGenes,
 			getFeatures,
 			getGeneId,
+			findGene,
 			getSig,
 			getSigTable,
 			addFeatures,
 			getLevels,
 			getRepLevels,
-			findSimilar
+			findSimilar,
+			makeRnk,
+			genePlot,
+			makeGeneRegionTrack,
+			DB,
+			sigMatrix,
+			csScatterMatrix,
+			csVolcanoMatrix,
+			MDSplot,
+			PCAplot,
+			fpkmSCVPlot
 )
 
 export("readCufflinks",

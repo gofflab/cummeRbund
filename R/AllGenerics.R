@@ -23,11 +23,14 @@ setGeneric("relCDS",function(object) standardGeneric("relCDS"))
 setGeneric("getGene",function(object,geneId,sampleIdList=NULL) standardGeneric("getGene"))
 setGeneric("getGenes",function(object,geneIdList,sampleIdList=NULL) standardGeneric("getGenes"))
 setGeneric("getGeneId",function(object,idList) standardGeneric("getGeneId"))
+setGeneric("findGene",function(object,query) standardGeneric("findGene"))
 setGeneric("getFeatures",function(object,featureIdList,sampleIdList=NULL,...) standardGeneric("getFeatures"))
 setGeneric("getSig", function(object,x,y,alpha=0.05,level="genes") standardGeneric("getSig"))
 setGeneric("getSigTable", function(object,alpha=0.05,level='genes') standardGeneric("getSigTable"))
 setGeneric("addFeatures",function(object, features, ...) standardGeneric("addFeatures"))
 setGeneric("findSimilar",function(object,x,n,...) standardGeneric("findSimilar"))
+setGeneric("makeGRanges",function(object,id,idField='transcript_id') standardGeneric("makeGRanges"))
+setGeneric("sigMatrix",function(object,alpha=0.05,level='genes',orderByDist=F) standardGeneric("sigMatrix"))
 
 ###############
 #CuffData
@@ -45,11 +48,19 @@ setGeneric("tables",function(object) standardGeneric("tables"))
 setGeneric("fpkmMatrix",function(object,...) standardGeneric("fpkmMatrix"))
 setGeneric("repFpkmMatrix",function(object,...) standardGeneric("repFpkmMatrix"))
 setGeneric("countMatrix",function(object,...) standardGeneric("countMatrix"))
+setGeneric("repCountMatrix",function(object,...) standardGeneric("repCountMatrix"))
 setGeneric("diffData",function(object, x, y, features=FALSE, lnFcCutoff=20, ...) standardGeneric("diffData"))
+setGeneric("diffTable",function(object,...) standardGeneric("diffTable"))
 setGeneric("getLevels",function(object) standardGeneric("getLevels"))
 setGeneric("getRepLevels",function(object) standardGeneric("getRepLevels"))
 setGeneric("MAplot",function(object,x,y,logMode=T,pseudocount=1,...) standardGeneric("MAplot"))
 setGeneric("dispersionPlot",function(object) standardGeneric("dispersionPlot"))
+setGeneric("makeRnk",function(object,x,y,filename,...) standardGeneric("makeRnk"))
+setGeneric("csScatterMatrix",function(object,replicates=FALSE,logMode=TRUE,...) standardGeneric("csScatterMatrix"))
+setGeneric("csVolcanoMatrix",function(object,replicates=FALSE,logMode=TRUE,...) standardGeneric("csVolcanoMatrix"))
+setGeneric("MDSplot",function(object,replicates=FALSE,logMode=TRUE,...) standardGeneric("MDSplot"))
+setGeneric("PCAplot",function(object,x="PC1", y="PC2",replicates=TRUE,pseudocount=1.0,scale=TRUE,...) standardGeneric("PCAplot"))
+setGeneric("fpkmSCVPlot",function(object,FPKMLowerBound=1,...) standardGeneric("fpkmSCVPlot"))
 
 #CuffDist generics
 setGeneric("distValues",function(object, x, y,...) standardGeneric("distValues"))
@@ -74,20 +85,25 @@ setGeneric("csBoxplot",function(object, logMode=T, ...) standardGeneric("csBoxpl
 #CuffFeatureSet
 #################
 setGeneric("csHeatmap",function(object,rescaling='none', clustering='none', labCol=T, labRow=T, logMode=T, pseudocount=1.0, border=FALSE, heatscale= c(low='darkred',mid='orange',high='white'), heatMidpoint=NULL, ...) standardGeneric("csHeatmap"))
+setGeneric("csDistHeat",function(object, samples.not.genes=T, logMode=T, pseudocount=1.0, heatscale=c(low='lightyellow',mid='orange',high='darkred'), heatMidpoint=NULL, ...) standardGeneric("csDistHeat"))
 setGeneric("csCluster",function(object, k, iter.max=100, ...) standardGeneric("csCluster"))
 #setGeneric("csClusterPlot",function(clustering, pseudocount=1.0) standardGeneric("csClusterPlot"))
 #setGeneric("diff",function(object) standardGeneric("diff"))
 setGeneric("annotation",function(object) standardGeneric("annotation"))
 setGeneric("csSpecificity",function(object,logMode=T,pseudocount=1,relative=FALSE,...) standardGeneric("csSpecificity"))
-setGeneric("csDendro",function(object,logMode=T,pseudocount=1,replicates=FALSE) standardGeneric("csDendro"))
+setGeneric("csDendro",function(object,logMode=T,pseudocount=1,replicates=FALSE,...) standardGeneric("csDendro"))
 
 ##################
 #CuffGene
 ##################
+setGeneric("genePlot",function(object) standardGeneric("genePlot"))
+setGeneric("makeGeneRegionTrack",function(object) standardGeneric("makeGeneRegionTrack"))
+
 
 ##############
 #CuffFeature
 ##############
+setGeneric("getGenome",function(object) standardGeneric	("getGenome"))
 
 #CuffFeature plotting
 setGeneric("expressionBarplot",function(object, logMode=FALSE, pseudocount=1.0, showErrorbars=TRUE, ...) standardGeneric("expressionBarplot"))

@@ -146,6 +146,12 @@ setMethod("relCDS","CuffSet",function(object){
 		return(object@relCDS)
 		})
 
+.getGenome<-function(object){
+	genomeQuery<-"SELECT value FROM runInfo WHERE param='genome'"
+	genome<-dbGetQuery(object@DB,genomeQuery)
+	genome<-unique(genome[,1])
+	genome
+}
 
 #make CuffGene objects from a gene_ids
 .getGene<-function(object,geneId,sampleIdList=NULL){
@@ -189,6 +195,7 @@ setMethod("relCDS","CuffSet",function(object){
 	#print(geneDiffQuery)
 	geneRepFPKMQuery<-paste("SELECT y.* from genes x JOIN geneReplicateData y ON x.gene_id=y.gene_id ",whereStringRep,sep="")
 	geneCountQuery<-paste("SELECT y.* from genes x JOIN geneCount y ON x.gene_id=y.gene_id ",whereStringFPKM,sep="")
+	geneFeatureQuery<-paste("SELECT y.* FROM features y JOIN genes x on y.gene_id = x.gene_id ",whereString,sep="")
 	
 	isoformAnnotationQuery<-paste("SELECT * from isoforms i JOIN genes x ON i.gene_id = x.gene_id ",whereString,sep="")
 	isoformFPKMQuery<-paste("SELECT y.* from isoforms i JOIN isoformData y ON i.isoform_id = y.isoform_id JOIN genes x ON i.gene_id = x.gene_id ",whereStringFPKM,sep="")
@@ -220,6 +227,8 @@ setMethod("relCDS","CuffSet",function(object){
 	genes.diff$sample_2<-factor(genes.diff$sample_2,levels=myLevels)
 	genes.repFpkm<-dbGetQuery(object@DB,geneRepFPKMQuery)
 	genes.count<-dbGetQuery(object@DB,geneCountQuery)
+	genes.annotation<-dbGetQuery(object@DB,geneAnnotationQuery)
+	genes.features<-dbGetQuery(object@DB,geneFeatureQuery)
 	
 	#isoforms
 	isoform.fpkm<-dbGetQuery(object@DB,isoformFPKMQuery)
@@ -229,6 +238,7 @@ setMethod("relCDS","CuffSet",function(object){
 	isoform.diff$sample_2<-factor(isoform.diff$sample_2,levels=myLevels)
 	isoform.repFpkm<-dbGetQuery(object@DB,isoformRepFPKMQuery)
 	isoform.count<-dbGetQuery(object@DB,isoformCountQuery)
+	isoform.annotation<-dbGetQuery(object@DB,isoformAnnotationQuery)
 	
 	#CDS
 	CDS.fpkm<-dbGetQuery(object@DB,CDSFPKMQuery)
@@ -238,6 +248,7 @@ setMethod("relCDS","CuffSet",function(object){
 	CDS.diff$sample_2<-factor(CDS.diff$sample_2,levels=myLevels)
 	CDS.repFpkm<-dbGetQuery(object@DB,CDSRepFPKMQuery)
 	CDS.count<-dbGetQuery(object@DB,CDSCountQuery)
+	CDS.annotation<-dbGetQuery(object@DB,CDSAnnotationQuery)
 	
 	#TSS
 	TSS.fpkm<-dbGetQuery(object@DB,TSSFPKMQuery)
@@ -247,40 +258,43 @@ setMethod("relCDS","CuffSet",function(object){
 	TSS.diff$sample_2<-factor(TSS.diff$sample_2,levels=myLevels)
 	TSS.repFpkm<-dbGetQuery(object@DB,TSSRepFPKMQuery)
 	TSS.count<-dbGetQuery(object@DB,TSSCountQuery)
+	TSS.annotation<-dbGetQuery(object@DB,TSSAnnotationQuery)
 	
+	end<-dbSendQuery(object@DB,"END;")
+	
+	#write(.getGenome(object),stderr())
 	res<-new("CuffGene",
 			id=geneId,
-			annotation=dbGetQuery(object@DB,geneAnnotationQuery),
+			features=genes.features,
+			annotation=genes.annotation,
 			fpkm=genes.fpkm,
 			diff=genes.diff,
 			repFpkm=genes.repFpkm,
 			count=genes.count,
+			genome=.getGenome(object),
 			isoforms=new("CuffFeature",
-					annotation=dbGetQuery(object@DB,isoformAnnotationQuery),
+					annotation=isoform.annotation,
 					fpkm=isoform.fpkm,
 					diff=isoform.diff,
 					repFpkm=isoform.repFpkm,
 					count=isoform.count
 					),
 			TSS=new("CuffFeature",
-					annotation=dbGetQuery(object@DB,TSSAnnotationQuery),
+					annotation=TSS.annotation,
 					fpkm=TSS.fpkm,
 					diff=TSS.diff,
 					repFpkm=TSS.repFpkm,
 					count=TSS.count
-			),
+					),
 			CDS=new("CuffFeature",
-					annotation=dbGetQuery(object@DB,CDSAnnotationQuery),
+					annotation=CDS.annotation,
 					fpkm=CDS.fpkm,
 					diff=CDS.diff,
 					repFpkm=CDS.repFpkm,
 					count=CDS.count
-			)
-
+					)
 			
-		)
-	end<-dbSendQuery(object@DB,"END;")
-		
+			)
 		res
 }
 
@@ -434,6 +448,8 @@ setMethod("getGene",signature(object="CuffSet"),.getGene)
 	write("\tCounts",stderr())
 	TSS.count<-dbGetQuery(object@DB,TSSCountQuery)
 	
+	end<-dbSendQuery(object@DB,"END;")
+	
 	#Promoters
 	write("Getting promoter information:", stderr())
 	write("\tdistData",stderr())
@@ -454,7 +470,6 @@ setMethod("getGene",signature(object="CuffSet"),.getGene)
 	CDS.distData<-dbGetQuery(object@DB,CDSDistQuery)
 	CDS.distData$sample_1<-factor(CDS.distData$sample_1,levels=myLevels)
 	CDS.distData$sample_2<-factor(CDS.distData$sample_2,levels=myLevels)
-
 	
 	res<-new("CuffGeneSet",
 			#TODO: Fix ids so that it only displays those genes in CuffGeneSet
@@ -464,6 +479,7 @@ setMethod("getGene",signature(object="CuffSet"),.getGene)
 			diff=genes.diff,
 			repFpkm=genes.repFpkm,
 			count=genes.count,
+			genome=.getGenome(object),
 			isoforms=new("CuffFeatureSet",
 					annotation=isoform.annot,
 					fpkm=isoform.fpkm,
@@ -500,15 +516,14 @@ setMethod("getGene",signature(object="CuffSet"),.getGene)
 					fpkm=genes.fpkm,
 					diff=CDS.distData
 					)
-			)
-	end<-dbSendQuery(object@DB,"END;")		
+			)	
 	res
 }
 
 setMethod("getGenes",signature(object="CuffSet"),.getGenes)
 
 .getGeneId<-function(object,idList){
-	#Query that takes list of any identifier and retrieves gene_id values from db
+	#Query that takes list of any identifier and retrieves gene_id values from db (does not report missing finds)
 	searchString<-"("
 	for(i in idList){
 		searchString<-paste(searchString,"'",i,"',",sep="")
@@ -523,6 +538,16 @@ setMethod("getGenes",signature(object="CuffSet"),.getGenes)
 }
 
 setMethod("getGeneId",signature(object="CuffSet"),.getGeneId)
+
+.findGene<-function(object,query){
+	#Utility to search for gene_id and gene_short_name given a single 'query' string (e.g. query='pink1' will return all genes with 'pink1' (case-insensitive) in the gene_short_name field.
+	geneQuery<-paste("SELECT DISTINCT g.gene_id,g.gene_short_name FROM genes g LEFT JOIN isoforms i on g.gene_id=i.gene_id LEFT JOIN TSS t on g.gene_id=t.gene_id LEFT JOIN CDS c ON g.gene_id=c.gene_id WHERE (g.gene_id = '",query,"' OR g.gene_short_name = '",query,"' OR i.isoform_id = '",query,"' OR t.tss_group_id = '",query,"' OR c.CDS_id ='",query,"') OR g.gene_short_name LIKE '%",query,"%'",sep="")
+	res<-dbGetQuery(object@DB,geneQuery)
+	res
+}
+
+setMethod("findGene",signature(object="CuffSet"),.findGene)
+
 
 .getFeatures<-function(object,featureIdList,sampleIdList=NULL,level='isoforms'){
 	#Sample subsetting
@@ -580,7 +605,8 @@ setMethod("getGeneId",signature(object="CuffSet"),.getGeneId)
 			fpkm=dbGetQuery(object@DB,FPKMQuery),
 			diff=dbGetQuery(object@DB,DiffQuery),
 			repFpkm=dbGetQuery(object@DB,repFPKMQuery),
-			count=dbGetQuery(object@DB,countQuery)
+			count=dbGetQuery(object@DB,countQuery),
+			genome=.getGenome(object)
 		)
 	end<-dbSendQuery(object@DB,"END;")		
 	res
@@ -588,8 +614,6 @@ setMethod("getGeneId",signature(object="CuffSet"),.getGeneId)
 }
 
 setMethod("getFeatures",signature(object="CuffSet"),.getFeatures)
-	
-
 
 
 #getGeneIds from featureIds
@@ -743,10 +767,53 @@ setMethod("getSig",signature(object="CuffSet"),.getSig)
 
 setMethod("getSigTable",signature(object="CuffSet"),.getSigTable)
 
+.sigMatrix<-function(object,alpha=0.05,level='genes',orderByDist=FALSE){
+	if(level %in% c('promoters','splicing','relCDS')){
+		diffTable<-slot(object,level)@table
+	}else{
+		diffTable<-slot(object,level)@tables$expDiffTable
+	}
+	
+	sql<-paste("SELECT ",slot(object,level)@idField,", sample_1, sample_2, p_value from ", diffTable," WHERE status='OK';")
+	sig<-dbGetQuery(object@DB,sql)
+	sig$q_value<-p.adjust(sig$p_value,method='BH')
+	
+	sig<-sig[sig$q_value<=alpha,]
+	
+	fieldsNeeded<-c('sample_1','sample_2')
+	sig<-sig[,fieldsNeeded]
+	
+	if(orderByDist){
+		#This does not work yet...
+		mySamples<-colnames(fpkmMatrix(slot(object,level)))
+		sampleOrder<-mySamples[order.dendrogram(as.dendrogram(hclust(JSdist(makeprobs(log10(fpkmMatrix(slot(object,level))))))))]
+	}
+	else {
+		sampleOrder<-rev(samples(object)$sample_name)
+	}
+	sig$sample_1<-factor(sig$sample_1,levels=sampleOrder)
+	sig$sample_2<-factor(sig$sample_2,levels=sampleOrder)
+	
+	p<-ggplot(sig,aes(x=sample_1,y=sample_2))
+	
+	p<- p + stat_sum(aes(fill=..n..),color="black",size=0.3, geom="tile") + scale_fill_continuous(low="white",high="green") + expand_limits(fill=0)
+	
+	p<- p + stat_sum(aes(label=..n..),geom="text",size=6,legend=FALSE)
+	
+	#p <- p + geom_tile(aes(fill=..n..))
+	
+	p + theme_bw() + labs(title=paste("Significant ",slot(object,level)@tables$mainTable,"\n at alpha ",alpha,sep="")) +theme(axis.text.x=element_text(angle=-90, hjust=0)) + coord_equal(1)
+	
+}
+
+setMethod("sigMatrix",signature(object="CuffSet"),.sigMatrix)
+
 #Find similar genes
 .findSimilar<-function(object,x,n,distThresh,returnGeneSet=TRUE,...){
 	#x can be either a gene_id, gene_short_name or a vector of FPKM values (fake gene expression profile)
 	#TODO: make findSimilar work with all levels
+	#TODO: Possibly add FPKM thresholding
+	
 	if(is.character(x)){
 		myGene<-getGene(object,x)
 		sig<-makeprobsvec(fpkmMatrix(myGene,...)[1,])
@@ -816,6 +883,33 @@ setMethod("getRepLevels",signature(object="CuffSet"),.getRepLevels)
 	}
 }
 
+#####################
+#GenomicRanges
+#####################
+#.makeGRanges<-function(dbConn,id,idField='transcript_id'){
+#	txQuery<-paste("SELECT * FROM features WHERE ",idField,"='",id,"'",sep="")
+#	print(txQuery)
+#	features<-dbGetQuery(dbConn,txQuery)
+#	#res<-GRanges(seqnames=features$seqnames,ranges=IRanges(start=features$start,end=features$end,names=features$exon_number),strand=features$strand)
+#	res<-GRanges(features[,-1])
+#	res
+#}
+
+.makeGRanges<-function(object,id,idField='transcript_id'){
+	txQuery<-paste("SELECT * from features WHERE ",idField,"='",id,"'",sep="")
+	myFeat<-dbGetQuery(object@DB,txQuery)
+	#res<-GRanges(myFeat[,-1])
+	res<-GRanges(seqnames=myFeat$seqnames,ranges=IRanges(start=myFeat$start,end=myFeat$end,names=myFeat$exon_number),strand=myFeat$strand)
+	res
+}
+
+setMethod("makeGRanges",signature(object="CuffSet"),.makeGRanges)
+
+#.makeGRangesList<-function(object,id,idField="gene_id"){
+#	#use .makeGRanges for each sub-feature of id to create GRangesList
+#}
+#
+#setMethod("makeGRangesList",signature(object="CuffSet"),.makeGRangesList)
 
 #####################
 #Add FeatureData    #
@@ -850,3 +944,7 @@ setMethod("addFeatures",signature(object="CuffSet"),.addFeatures)
 #	setwd(myWD)
 #}
 
+###################
+# Coersion methods
+###################
+#As ExpressionSet
