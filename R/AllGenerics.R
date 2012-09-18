@@ -89,7 +89,6 @@ setGeneric("csDistHeat",function(object, samples.not.genes=T, logMode=T, pseudoc
 setGeneric("csCluster",function(object, k, iter.max=100, ...) standardGeneric("csCluster"))
 #setGeneric("csClusterPlot",function(clustering, pseudocount=1.0) standardGeneric("csClusterPlot"))
 #setGeneric("diff",function(object) standardGeneric("diff"))
-setGeneric("annotation",function(object) standardGeneric("annotation"))
 setGeneric("csSpecificity",function(object,logMode=T,pseudocount=1,relative=FALSE,...) standardGeneric("csSpecificity"))
 setGeneric("csDendro",function(object,logMode=T,pseudocount=1,replicates=FALSE,...) standardGeneric("csDendro"))
 
