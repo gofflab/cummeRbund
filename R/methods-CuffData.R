@@ -71,12 +71,12 @@ setMethod("addFeatures",signature="CuffData",.addFeatures)
 ###################
 #Accessors
 ###################
-.features<-function(object){
+.annotation<-function(object){
 	featureQuery<-paste("SELECT * FROM ",object@tables$mainTable," x LEFT JOIN ",object@tables$featureTable," xf ON x.",object@idField,"=xf.",object@idField,sep="")
 	dbGetQuery(object@DB, featureQuery)
 }
 
-setMethod("features","CuffData",.features)
+setMethod("annotation","CuffData",.annotation)
 
 .featureNames<-function(object){
 	featureQuery<-paste("SELECT ",object@idField," FROM ",object@tables$mainTable, sep="")
@@ -679,13 +679,18 @@ setMethod("csVolcano",signature(object="CuffData"), .volcano)
 
 setMethod("csVolcanoMatrix",signature(object="CuffData"),.volcanoMatrix)
 
-.distheat<-function(object, samples.not.genes=T, logMode=T, pseudocount=1.0, heatscale=c(low='lightyellow',mid='orange',high='darkred'), heatMidpoint=NULL, ...) {
+.distheat<-function(object, replicates=F, samples.not.genes=T, logMode=T, pseudocount=1.0, heatscale=c(low='lightyellow',mid='orange',high='darkred'), heatMidpoint=NULL, ...) {
 	# get expression from a sample or gene perspective
+	if(replicates){
+		obj.fpkm<-repFpkmMatrix(object,fullnames=T)
+	}else{
+		obj.fpkm<-fpkmMatrix(object,fullnames=T)
+	}
+	
 	if(samples.not.genes) {
-		obj.fpkm = fpkmMatrix(object)
 		obj.fpkm.pos = obj.fpkm[rowSums(obj.fpkm)>0,]
 	} else {
-		obj.fpkm = t(fpkmMatrix(object,fullnames=T))
+		obj.fpkm = t(obj.fpkm)
 		obj.fpkm.pos = obj.fpkm[,colSums(obj.fpkm)>0]
 	}
 	
@@ -710,10 +715,10 @@ setMethod("csVolcanoMatrix",signature(object="CuffData"),.volcanoMatrix)
 	g = g + geom_tile(color="black") + scale_x_discrete("", limits=labels[obj.hc$order]) + scale_y_discrete("", limits=labels[obj.hc$order])
 	
 	# roll labels
-	g = g + theme(axis.text.x=element_text(angle=-90, hjust=0), axis.text.y=theme_text(angle=0, hjust=1))
+	g = g + theme(axis.text.x=element_text(angle=-90, hjust=0), axis.text.y=element_text(angle=0, hjust=1))
 	
 	# drop grey panel background and gridlines
-	g = g + theme(panel.grid.minor=theme_line(colour=NA), panel.grid.major=theme_line(colour=NA), panel.background=theme_rect(fill=NA, colour=NA))
+	g = g + theme(panel.grid.minor=element_line(colour=NA), panel.grid.major=element_line(colour=NA), panel.background=element_rect(fill=NA, colour=NA))
 	
 	# adjust heat scale
 	if (length(heatscale) == 2) {

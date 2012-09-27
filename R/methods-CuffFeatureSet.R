@@ -91,7 +91,7 @@ setMethod("replicates","CuffFeatureSet",.replicates)
 	myFPKM<-object@fpkm
 	myFPKM$stdev<-(myFPKM$conf_hi-myFPKM$fpkm)/2
 	if (features){
-		return (merge(object@annotation,myFPKM))
+		return (merge(object@annotation,myFPKM,by=1))
 	}else{
 		return(myFPKM)
 	}
@@ -102,7 +102,7 @@ setMethod("fpkm",signature(object="CuffFeatureSet"),.fpkm)
 	myFPKM<-object@repFpkm
 	#myFPKM$stdev<-(myFPKM$conf_hi-myFPKM$fpkm)/2
 	if (features){
-		return (merge(object@annotation,myFPKM))
+		return (merge(object@annotation,myFPKM,by=1))
 	}else{
 		return(myFPKM)
 	}
@@ -115,11 +115,11 @@ setMethod("repFpkm",signature(object="CuffFeatureSet"),.repFpkm)
 
 setMethod("featureNames",signature(object="CuffFeatureSet"),.featureNames)
 
-.features<-function(object){
+.annotation<-function(object){
 	object@annotation
 }
 
-setMethod("features",signature(object="CuffFeatureSet"),.features)
+setMethod("annotation",signature(object="CuffFeatureSet"),.annotation)
 
 .fpkmMatrix<-function(object,fullnames=FALSE,sampleIdList){
 	#Sample subsetting
@@ -253,7 +253,7 @@ setMethod("diffData",signature(object="CuffFeatureSet"),.diffData)
 
 .count<-function(object,features=FALSE){
 	if (features){
-		return (merge(object@annotation,object@count))
+		return (merge(object@annotation,object@count,by=1))
 	}else{
 		return(object@count)
 	}
@@ -287,7 +287,7 @@ setMethod("annotation","CuffFeatureSet",function(object){
 #There is no genericMethod yet, goal is to replace .heatmap with .ggheat for genericMethod 'csHeatmap'
 
 .ggheat<-function(object, rescaling='none', clustering='none', labCol=T, labRow=T, logMode=T, pseudocount=1.0, 
-		border=FALSE, heatscale=c(low='lightyellow',mid='orange',high='darkred'), heatMidpoint=NULL,fullnames=T,replicates=FALSE,...) {
+		border=FALSE, heatscale=c(low='lightyellow',mid='orange',high='darkred'), heatMidpoint=NULL,fullnames=T,replicates=FALSE,method='none',...) {
 	## the function can be be viewed as a two step process
 	## 1. using the rehape package and other funcs the data is clustered, scaled, and reshaped
 	## using simple options or by a user supplied function
@@ -314,17 +314,17 @@ setMethod("annotation","CuffFeatureSet",function(object){
 	## if you want a different distance/cluster method-- or to cluster and then scale
 	## then you can supply a custom function 
 	
-	if(is.function(clustering)) 
-	{
-		m=clustering(m)
-	}else{
-		if(clustering=='row')
-			m=m[hclust(JSdist(makeprobs(t(m))))$order, ]
-		if(clustering=='column')  
-			m=m[,hclust(JSdist(makeprobs(m)))$order]
-		if(clustering=='both')
-			m=m[hclust(JSdist(makeprobs(t(m))))$order ,hclust(JSdist(makeprobs(m)))$order]
+	if(!is.function(method)){
+		method = function(mat){JSdist(makeprobs(t(mat)))}	
 	}
+
+	if(clustering=='row')
+		m=m[hclust(method(m))$order, ]
+	if(clustering=='column')  
+		m=m[,hclust(method(t(m)))$order]
+	if(clustering=='both')
+		m=m[hclust(method(m))$order ,hclust(method(t(m)))$order]
+
 	## this is just reshaping into a ggplot format matrix and making a ggplot layer
 	
 	if(is.function(rescaling))
@@ -361,7 +361,7 @@ setMethod("annotation","CuffFeatureSet",function(object){
 	## add the heat tiles with or without a white border for clarity
 	
 	if(border==TRUE)
-		g2=g+geom_rect(aes(xmin=colInd-1,xmax=colInd,ymin=rowInd-1,ymax=rowInd, fill=value),colour='white')
+		g2=g+geom_rect(aes(xmin=colInd-1,xmax=colInd,ymin=rowInd-1,ymax=rowInd, fill=value),colour='grey')
 	if(border==FALSE)
 		g2=g+geom_rect(aes(xmin=colInd-1,xmax=colInd,ymin=rowInd-1,ymax=rowInd, fill=value))
 	
@@ -431,13 +431,18 @@ setMethod("csHeatmap",signature("CuffFeatureSet"),.ggheat)
 
 
 # Distance Heatmaps
-.distheat<-function(object, samples.not.genes=T, logMode=T, pseudocount=1.0, heatscale=c(low='lightyellow',mid='orange',high='darkred'), heatMidpoint=NULL, ...) {
+.distheat<-function(object, replicates=F, samples.not.genes=T, logMode=T, pseudocount=1.0, heatscale=c(low='lightyellow',mid='orange',high='darkred'), heatMidpoint=NULL, ...) {
   # get expression from a sample or gene perspective
-  if(samples.not.genes) {
-    obj.fpkm = fpkmMatrix(object)
+	if(replicates){
+		obj.fpkm<-repFpkmMatrix(object,fullnames=T)
+	}else{
+		obj.fpkm<-fpkmMatrix(object,fullnames=T)
+	}
+
+	if(samples.not.genes) {
     obj.fpkm.pos = obj.fpkm[rowSums(obj.fpkm)>0,]
   } else {
-    obj.fpkm = t(fpkmMatrix(object))
+    obj.fpkm = t(obj.fpkm)
     obj.fpkm.pos = obj.fpkm[,colSums(obj.fpkm)>0]
   }
   
@@ -603,7 +608,7 @@ setMethod("csVolcano",signature(object="CuffFeatureSet"), .volcano)
 	
 	colnames(dat)[1]<-"tracking_id"
 	#tracking_ids<-dat$tracking_id
-	obj_features <- features(object)
+	obj_features <- annotation(object)
 	tracking_ids <- obj_features[,1]
 	
 	gene_labels<-obj_features$gene_short_name
@@ -772,10 +777,13 @@ setMethod("expressionPlot",signature(object="CuffFeatureSet"),.expressionPlot)
 #	c
 #}
 
-.cluster<-function(object, k, pseudocount=1,...){
+.cluster<-function(object, k, logMode=T, pseudocount=1,...){
 	require(cluster)
 	m<-as.data.frame(fpkmMatrix(object))
 	m<-m[rowSums(m)>0,]
+	if(logMode){
+		m<-log10(m+pseudocount)
+	}
 	n<-JSdist(makeprobs(t(m)))
 	clusters<-pam(n,k, ...)
 	#clsuters<-pamk(n,krange=2:20)

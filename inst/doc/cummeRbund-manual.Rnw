@@ -6,7 +6,7 @@
 %\VignettePackage{cummeRbund}
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%\SweaveOpts{prefix.string=graphics/cummeRbund-manual}
+%\SweaveOpts{prefix.string='graphics/cummeRbund-manual'}
 \documentclass[10pt]{article}
 \usepackage[margin=0.75in]{geometry}
 \usepackage{amsmath}
@@ -62,8 +62,8 @@
 \bibliographystyle{plainnat}
 \title{CummeRbund: Visualization and Exploration of Cufflinks High-throughput Sequencing Data}
 
-\author{Loyal A. Goff, Cole Trapnell}
-\date{May 4, 2012}
+\author{Loyal A. Goff, Cole Trapnell, David Kelley}
+\date{September 24, 2012}
 \begin{document}
 <<init, echo=FALSE>>=
 options(width=65)
@@ -82,10 +82,12 @@ that you update your cufflinks version >=2.0 to take full advantage of the impro
 	\item Packages:
 	\begin{itemize}
 		\item \Rpackage{RSQLite}
-		\item \Rpackage{ggplot2 v0.9}
+		\item \Rpackage{ggplot2 v0.9.2}
 		\item \Rpackage{reshape2}
 		\item \Rpackage{plyr}
 		\item \Rpackage{fastcluster}
+        \item \Rpackage{rtracklayer}
+        \item \Rpackage{Gviz}
 		\item Recommended:
 		\begin{itemize}
 			\item \Rpackage{Hmisc}
@@ -157,6 +159,8 @@ that you update your cufflinks version >=2.0 to take full advantage of the impro
 		\item repFpkm: A data frame of deconvolved FPKM values across individual replicates, for all features in object.
 		\item diff: A data frame of differential expression/regulation data for all features in object.
 		\item count: A data frame containing raw and normalized fragment counts, variance, dispersion, and uncertainty for all features in object.
+        \item genome: A character string indicating which build of the genome
+        the associated features are derived from.  (e.g. `hg19',`mm9')
 	\end{itemize}
 	
 	A specialized sub-class of \Rclass{CuffFeatureSet} is the \Rclass{CuffGeneSet} class. This subclass adds additional slots to contain all isoforms, TSS, and CDS information for a given set of gene\_ids.  The \Rclass{CuffGeneSet} class is designed to aggregate all relevant
@@ -188,6 +192,8 @@ that you update your cufflinks version >=2.0 to take full advantage of the impro
 		\item isoforms: A \Rclass{CuffFeature} object for all isoforms of a given gene.
 		\item TSS: A \Rclass{CuffFeature} object for all TSS of a given gene.
 		\item CDS: A \Rclass{CuffFeature} object for all CDS of a given gene.
+        \item features: A \Rclass{data.frame} object containing feature
+        information for the transcript models describing the gene.
 	\end{itemize}
 
 \clearpage
@@ -396,7 +402,7 @@ s<-csScatterMatrix(genes(cuff))
 	print(s)
 @
 	
-	\includegraphics[width=0.4\textwidth]{cummeRbund-manual-global_plots_scatter_1}}
+	\includegraphics[width=0.65\textwidth]{cummeRbund-manual-global_plots_scatter_1}}
 	\end{center}
 \end{figure}
 
@@ -495,7 +501,7 @@ v
 <<global_plots_5_1>>
 print(v)
 @
-		\includegraphics[width=0.4\textwidth]{cummeRbund-manual-global_plots_volcano_1}}
+		\includegraphics[width=0.65\textwidth]{cummeRbund-manual-global_plots_volcano_1}}
 	\end{center}
 \end{figure}
 
@@ -530,10 +536,12 @@ replicates(cuff)
 @
 
 \subsection*{Features/Annotation}
-Feature-level information can be accessed directly from a \Rclass{CuffData} object using the \Rmethod{fpkm}, \Rmethod{repFpkm}, \Rmethod{count}, \Rmethod{diffData}, or \Rmethod{features} methods:
+Feature-level information can be accessed directly from a \Rclass{CuffData}
+object using the \Rmethod{fpkm}, \Rmethod{repFpkm}, \Rmethod{count},
+\Rmethod{diffData}, or \Rmethod{annotation} methods:
 
 <<data_access_1>>=
-gene.features<-features(genes(cuff))
+gene.features<-annotation(genes(cuff))
 head(gene.features)
 
 gene.fpkm<-fpkm(genes(cuff))
@@ -604,7 +612,7 @@ myGeneIds
 myGenes<-getGenes(cuff,myGeneIds)
 myGenes
 @
-The same \Rmethod{fpkm}, \Rmethod{repFpkm}, \Rmethod{count}, \Rmethod{features}, \Rmethod{diffData}, \Rmethod{samples}, and \Rmethod{featureNames} methods are available for instances of the \Rmethod{CuffGeneSet} class, but additional accessor methods are available for the \Rmethod{promoters}, \Rmethod{relCDS}, and \Rmethod{splicing} slot data as well.
+The same \Rmethod{fpkm}, \Rmethod{repFpkm}, \Rmethod{count}, \Rmethod{annotation}, \Rmethod{diffData}, \Rmethod{samples}, and \Rmethod{featureNames} methods are available for instances of the \Rmethod{CuffGeneSet} class, but additional accessor methods are available for the \Rmethod{promoters}, \Rmethod{relCDS}, and \Rmethod{splicing} slot data as well.
 
 <<create_geneset_2>>=
 #FPKM values for genes in gene set
@@ -993,6 +1001,120 @@ Alternatively, you can use the \Rmethod{getSigTable()} method to return a full t
 mySigTable<-getSigTable(cuff,alpha=0.01,level='genes')
 head(mySigTable,20)
 @
+
+\subsection{Exploring the relationships between conditions}
+
+\subsubsection{Distance matrix}
+Similarities between conditions and/or replicates can
+provide useful insight into the relationship between various groupings of
+conditions and can aid in identifying outlier replicates that do not behave as
+expected. cummeRbund provides the \Rmethod{csDistHeat()} method to visualize the
+pairwise similarities between conditions:
+
+<<dist_heat_1,include=FALSE>>=
+myDistHeat<-csDistHeat(genes(cuff))
+
+@
+
+\begin{figure}[htp]
+	\begin{center}
+	\subfloat[JS distance heatmap between conditions across all gene features.]{
+	
+<<label=dist_heat_plot_1,fig=TRUE,echo=FALSE,include=FALSE>>=
+<<dist_heat_1>>
+print(myDistHeat)
+@
+	\includegraphics[width=0.6\textwidth]{cummeRbund-manual-dist_heat_plot_1}}
+	
+	\end{center}
+\end{figure}
+
+Again with the \Rfunarg{replicates} argument, distances between individual
+replicates can be presented.
+
+<<dist_heat_2,include=FALSE>>=
+myRepDistHeat<-csDistHeat(genes(cuff),replicates=T)
+
+@
+
+\begin{figure}[htp]
+	\begin{center}
+	\subfloat[JS distance heatmap between replicate samples across all gene
+	features.]{
+	
+<<label=dist_heat_plot_2,fig=TRUE,echo=FALSE,include=FALSE>>=
+<<dist_heat_2>>
+print(myRepDistHeat)
+@
+	\includegraphics[width=0.6\textwidth]{cummeRbund-manual-dist_heat_plot_2}}
+	
+	\end{center}
+\end{figure}
+
+This method can be used to explore similarities between conditions for all
+features, or just those features contained within a \Rclass{CuffGeneSet} class. 
+Additionally, the \Rfunarg{samples.not.genes=F} argument will display distances
+between individual genes or features across conditions.
+
+\subsubsection{Dimensionality reduction}
+Dimensionality reduction is an informative approach for clustering and exploring
+the relationships between conditions.  It can be useful for feature selection as
+well as identifying the sources of variability within your data.  To this end,
+we have applied two different dimensionality reduction strategies in
+\Rpackage{cummeRbund}: principal component analysis (PCA) and multi-dimensional
+scaling (MDS). We provide the two wrapper methods, \Rmethod{PCAplot} and
+\Rmethod{MDSplot}
+
+<<dim_reduction_1,include=FALSE>>=
+genes.PCA<-PCAplot(genes(cuff),"PC1","PC2")
+genes.MDS<-MDSplot(genes(cuff))
+
+genes.PCA.rep<-PCAplot(genes(cuff),"PC1","PC2",replicates=T)
+genes.MDS.rep<-MDSplot(genes(cuff),replicates=T)
+@
+
+\begin{figure}[htp]
+	\begin{center}
+	\subfloat[PCA plot for gene-level features]{
+	
+<<label=gene_PCA,fig=TRUE,echo=FALSE,include=FALSE>>=
+<<dim_reduction_1>>
+	print(genes.PCA)
+@
+	
+	\includegraphics[width=0.4\textwidth]{cummeRbund-manual-gene_PCA}
+	}
+	\qquad
+	\subfloat[MDS plot for gene-level features]{
+	
+<<label=gene_MDS,fig=TRUE,echo=FALSE,include=FALSE>>=
+
+	print(genes.MDS)
+@
+	
+	\includegraphics[width=0.4\textwidth]{cummeRbund-manual-gene_MDS}}
+	\qquad
+	\subfloat[Individual replicate level PCA plot for gene-level features]{
+	
+<<label=gene_PCA_rep,fig=TRUE,echo=FALSE,include=FALSE>>=
+
+	print(genes.PCA.rep)
+@
+	
+	\includegraphics[width=0.4\textwidth]{cummeRbund-manual-gene_PCA_rep}}
+	\qquad
+	\subfloat[Individual replicate level MDS plot for gene-level features]{
+	
+<<label=gene_MDS_rep,fig=TRUE,echo=FALSE,include=FALSE>>=
+
+	print(genes.MDS.rep)
+@
+	
+	\includegraphics[width=0.4\textwidth]{cummeRbund-manual-gene_MDS_rep}}
+	\end{center}
+\end{figure}
+
+\clearpage
 
 \subsection{Partitioning}
 K-means clustering is a useful tool that can be helpful in identifying clusters of genes with similar expression profiles. In fact, these profiles are learned from the data during the clustering. 

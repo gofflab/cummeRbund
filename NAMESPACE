@@ -1,4 +1,4 @@
-importFrom(BiocGenerics, annotation, "annotation<-")
+importFrom(BiocGenerics, annotation)
 
 import(methods)
 
