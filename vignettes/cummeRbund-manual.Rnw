@@ -929,7 +929,7 @@ biomTrack<-BiomartGeneRegionTrack(genome=genome,chromosome=as.character(myChr),
 trackList<-c(trackList,biomTrack)
  
 conservation <- UcscTrack(genome = genome, chromosome = myChr,
-		track = "Conservation", table = "phyloP46wayPlacental",
+		track = "Conservation", table = "phyloP100wayAll",
 		from = myStart-2000, to = myEnd+2000, trackType = "DataTrack",
 		start = "start", end = "end", data = "score",
 		type = "hist", window = "auto", col.histogram = "darkblue",
