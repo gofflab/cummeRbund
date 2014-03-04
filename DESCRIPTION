@@ -19,7 +19,7 @@ Collate: AllGenerics.R AllClasses.R database-setup.R methods-CuffSet.R
         methods-CuffFeatureSet.R methods-CuffGene.R
         methods-CuffFeature.R tools.R
 LazyLoad: yes
-biocViews: Sequencing, Sequencing, RNASeq, RNAseqData, GeneExpression,
+biocViews: Sequencing, RNASeq, RNAseqData, GeneExpression,
         DifferentialExpression, Infrastructure, DataImport,
         DataRepresentation, Visualization, Clustering,
         MultipleComparison, QualityControl
