@@ -56,7 +56,7 @@ loadRepTable<-function(repTableFile,
 	fileArgs$file = repTableFile
 	
 	#Read Run Info file
-	full = as.data.frame(do.call(read.table,fileArgs))
+	full = as.data.frame(read.delim(repTableFile))
 	#print(head(full))
 	
 	#Fix sample_names
@@ -69,6 +69,37 @@ loadRepTable<-function(repTableFile,
 	#Load into database (replicates table)
 	write("Writing replicates Table",stderr())
 	insert_SQL<-'INSERT INTO replicates VALUES(:file, :condition, :replicate_num, :rep_name, :total_mass, :norm_mass, :internal_scale, :external_scale)'
+	bulk_insert(dbConn,insert_SQL,full)
+}
+
+#ReplicateTable
+loadVarModelTable<-function(VarModelFile,
+		dbConn,
+		path,
+		fileArgs = list(sep=sep, header=header, row.names = row.names, quote=quote, na.string=na.string, ...),
+		sep="\t",
+		na.string = "-",
+		header = TRUE,
+		quote = "",
+		stringsAsFactors=FALSE,
+		row.names=NULL,
+		...) {
+	
+	#Setup and reporting
+	write(paste("Reading Var Model Info  ",VarModelFile,sep=""),stderr())
+	fileArgs$file = VarModelFile
+	
+	#Read Run Info file
+	full = as.data.frame(read.delim(VarModelFile))
+	#print(head(full))
+	
+	#Fix sample_names
+	full$condition<-make.db.names(dbConn,as.character(full$condition),unique=FALSE)
+	
+	
+	#Load into database (replicates table)
+	write("Writing varModel Table",stderr())
+	insert_SQL<-'INSERT INTO varModel VALUES(:condition, :locus, :compatible_count_mean, :compatible_count_var, :total_count_mean, :total_count_var, :fitted_var)'
 	bulk_insert(dbConn,insert_SQL,full)
 }
 
@@ -1580,6 +1611,23 @@ CREATE TABLE "isoformReplicateData"(
     FOREIGN KEY("sample_name")
     REFERENCES "samples"("sample_name")
 );
+DROP TABLE IF EXISTS "varModel";
+CREATE TABLE "varModel"(
+  "condition" VARCHAR(45) NOT NULL,
+  "locus" VARCHAR(45) NOT NULL,
+  "compatible_count_mean" FLOAT,
+  "compatible_count_var" FLOAT,
+  "total_count_mean" FLOAT,
+  "total_count_var" FLOAT,
+  "fitted_var" FLOAT,
+  CONSTRAINT "fk_varModel_locus1"
+    FOREIGN KEY("locus")
+    REFERENCES "genes"("locus")
+  CONSTRAINT "fk_varModel_condition1"
+    FOREIGN KEY("condition")
+    REFERENCES "samples"("sample_name")
+);
+
 COMMIT;
 
 
@@ -1678,6 +1726,8 @@ CREATE INDEX "features.features_strand_index" ON "features"("strand");
 CREATE INDEX "features.features_start_end_index" ON "features"("start","end");
 CREATE INDEX "features.fk_features_genes1" ON "features"("gene_id");
 CREATE INDEX "features.fk_features_isoforms1" ON "features"("isoform_id");
+CREATE INDEX "varModel.varModel_condition1" ON "varModel"("condition");
+CREATE INDEX "varModel.varModel_locus1" ON "varModel"("locus");
 '
 
 	create.sql <- strsplit(index.text,"\n")[[1]]
@@ -1741,6 +1791,7 @@ readCufflinks<-function(dir = getwd(),
 						CDSDiff="cds.diff",
 						promoterFile="promoters.diff",
 						splicingFile="splicing.diff",
+						varModelFile="var_model.info",
 						driver = "SQLite",
 						genome = NULL,
 						rebuild = FALSE,
@@ -1770,6 +1821,7 @@ readCufflinks<-function(dir = getwd(),
 	CDSDiff=file.path(dir,CDSDiff)
 	promoterFile=file.path(dir,promoterFile)
 	splicingFile=file.path(dir,splicingFile)
+	varModelFile=file.path(dir,varModelFile)
 					
 					
 	#Check to see whether dbFile exists
@@ -1786,6 +1838,11 @@ readCufflinks<-function(dir = getwd(),
 		if(file.exists(repTableFile)){
 			loadRepTable(repTableFile,dbConn)
 		}
+		
+		if(file.exists(varModelFile)){
+			loadVarModelTable(varModelFile,dbConn)
+		}
+		
 		if(!is.null(gtfFile)){
 			if(!is.null(genome)){
 				.loadGTF(gtfFile,genome,dbConn)
@@ -1906,6 +1963,73 @@ readCufflinks<-function(dir = getwd(),
 	genomeInsertQuery<-paste("INSERT INTO runInfo VALUES('genome', '",genome,"')",sep="")
 	#print(genomeInsertQuery)
 	dbSendQuery(dbConn,genomeInsertQuery)
+}
+
+.cuff2db <- function(gtfFile, out.file = NULL, verbose = TRUE) {
+	
+	#require(rtracklayer)
+	#require(GenomicRanges)
+	#require(GenomicFeatures)
+	
+	requiredAttribs <- c("gene_id", "transcript_id", "exon_number")
+	
+	if (verbose) message("Importing ", gtfFile)
+	tmp <- import(gtfFile, asRangedData=FALSE)
+	
+	#dispose of unspliced unstranded transcripts
+	#tmp <- tmp[ which(strand(tmp) %in% c('+','-')) ]
+	
+	# fix the gene IDs
+	#values(tmp)$gene_id <- gsub('CUFF.', '', values(tmp)$gene_id)
+	
+	# fix the exon IDs
+	#values(tmp)$transcript_id <- gsub('CUFF.', '', values(tmp)$transcript_id)
+	
+	# split the object into transcript and exon pieces
+	#by.type = split(tmp, values(tmp)$type)
+	#browser()
+	
+	#make transcripts table
+	tmpT <- split(tmp,
+			values(tmp)$transcript_id)
+	if(verbose) message('Attempting to create the transcripts data.frame')
+	transcripts <- data.frame(
+			tx_id=1:length(tmpT),
+			tx_name=names(tmpT),
+			tx_chrom=as.character(seqnames(unlist(tmpT))[start(tmpT@partitioning)]),
+			tx_strand=as.character(strand(unlist(tmpT))[start(tmpT@partitioning)]),
+			tx_start=sapply(start(ranges(tmpT)), min),
+			tx_end=sapply(end(ranges(tmpT)), max),
+			stringsAsFactors=FALSE
+	)
+	
+	#make splicings table
+	tmpS <- split(tmp, values(tmp)$transcript_id)
+	if(verbose) message('Attempting to create the splicings data.frame')
+	splicings <- data.frame(
+			tx_id=rep(1:length(tmpS), elementLengths(tmpS)),
+			exon_rank=as.integer(values(unlist(tmpS))$exon_number),
+			exon_chrom=as.character(seqnames(unlist(tmpS))),
+			exon_strand=as.character(strand(unlist(tmpS))),
+			exon_start=start(unlist(tmpS)),
+			exon_end=end(unlist(tmpS)),
+			stringsAsFactors=FALSE
+	)
+	
+	#make genes table
+	if(verbose) message('Attempting to create the genes data.frame')
+	gene_txs <- tapply(values(tmp)$transcript_id, values(tmp)$gene_id, unique)
+	genes <- data.frame(
+			tx_name=unlist(gene_txs),
+			gene_id=rep(names(gene_txs), sapply(gene_txs, length)),
+			stringsAsFactors=FALSE)
+	
+	#create the db
+	if (verbose) message("Creating TranscriptDb")
+	tmpdb <- makeTranscriptDb(transcripts, splicings, genes=genes)
+	if (verbose) message("Use saveFeatures() to save the database to a file")
+	return(tmpdb)
+	
 }
 
 #library(Gviz)

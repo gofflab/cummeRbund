@@ -3,7 +3,7 @@
 # Author: lgoff
 ###############################################################################
 
-JSdist<-function(mat){
+JSdist<-function(mat,...){
 	res<-matrix(0,ncol=dim(mat)[2],nrow=dim(mat)[2])
 	
 #	col_js <- matrix(0,ncol=dim(mat)[2],nrow=1)
@@ -23,13 +23,21 @@ JSdist<-function(mat){
 			res[j,i] = sqrt(JSdiv)
 		}
 	}
-	as.dist(res)
+	res<-as.dist(res,...)
+	attr(res,"method")<-"JSdist"
+	res
 }
 
 JSdistVec<-function(p,q){
 	JSdiv<-shannon.entropy((p+q)/2)-(shannon.entropy(p)+shannon.entropy(q))*0.5
 	JSdist<-sqrt(JSdiv)
 	JSdist
+}
+
+JSdivVec<-function(p,q){
+	JSdiv<-shannon.entropy((p+q)/2)-(shannon.entropy(p)+shannon.entropy(q))*0.5
+	#JSdist<-sqrt(JSdiv)
+	JSdiv
 }
 
 JSdistFromP<-function(mat,q){
@@ -51,7 +59,7 @@ shannon.entropy <- function(p) {
 	if (min(p) < 0 || sum(p) <=0)
 		return(Inf)
 	p.norm<-p[p>0]/sum(p)
-	-sum( log10(p.norm)*p.norm)
+	-sum( log2(p.norm)*p.norm)
 }
 
 makeprobs<-function(a){
@@ -95,24 +103,51 @@ makeprobs<-function(a){
 	p
 }
 
-#.volcanoMatrix <- function(data){
-#	part1<-data[,c('gene_id','sample_1','sample_2','value_1','value_2','test_stat','p_value','q_value')]
-#	part2<-data.frame(gene_id=part1$gene_id,sample_1=part1$sample_2,sample_2=part1$sample_1,value_1=part1$value_2,value_2=part1$value_1,test_stat=-part1$test_stat,p_value=part1$p_value,q_value=part1$q_value)
-#	data<-rbind(part1,part2)
-#	myLevels<-union(data$sample_1,data$sample_2)
-#	data$sample_1<-factor(data$sample_1,levels=myLevels)
-#	data$sample_2<-factor(data$sample_2,levels=myLevels)
-#	data$log2_fold_change<-log2(data$value_2/data$value_1)
-#	filler<-data.frame(sample_1=factor(myLevels,levels=myLevels),sample_2=factor(myLevels,levels=myLevels),label=as.character(myLevels))
-#	filler$label<-as.character(filler$label)
-#	mapping <- defaults(mapping, aes_string(x = "log2_fold_change", y = "-log10(p_value)"))
-#	class(mapping) <- "uneval"
-#	
-#	p <-ggplot(data) + geom_point(mapping,na.rm=TRUE,size=0.8) + geom_text(aes(x=0,y=15,label=label),data=filler) + facet_grid(sample_1~sample_2)
-#	
-#	p
-#	
-#}
+.hclustToJSON<-function(d,...){
+	require(rjson)
+	d$call<-NULL
+	res<-toJSON(d,...)
+	res
+}
+
+
+.dfToJSONarray <- function(dtf){
+	clnms <- colnames(dtf)
+	
+	name.value <- function(i){
+		quote <- '';
+		if(class(dtf[, i])!='numeric'){
+			quote <- '"';
+		}
+		
+		paste('"', i, '" : ', quote, dtf[,i], quote, sep='')
+	}
+	
+	objs <- apply(sapply(clnms, name.value), 1, function(x){paste(x, collapse=', ')})
+	objs <- paste('{', objs, '}')
+	
+	res <- paste('[', paste(objs, collapse=', '), ']')
+	
+	return(res)
+}
+
+.specificity<-function(mat,logMode=T,pseudocount=1,relative=FALSE,...){
+	if(logMode){
+		mat<-log10(mat+pseudocount)
+	}
+	mat<-t(makeprobs(t(mat)))
+	d<-diag(ncol(mat))
+	res<-apply(d,MARGIN=1,function(q){
+				JSdistFromP(mat,q)
+			})
+	colnames(res)<-paste(colnames(mat),"_spec",sep="")
+	
+	if(relative){
+		res<-res/max(res)
+	}
+	1-res
+}
+
 
 #multiplot <- function(..., plotlist=NULL, cols) {
 #	require(grid)

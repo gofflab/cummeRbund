@@ -131,22 +131,99 @@ setMethod("makeGeneRegionTrack",signature(object="CuffGene"),.makeGeneRegionTrac
 
 setMethod("genePlot",signature(object="CuffGene"),.plot)
 
+
+
+#################
+#Feature Plotting
+#################
+.ideogram<-function(object){
+	myStart<-min(object@features$start)
+	myEnd<-max(object@features$end)
+	mychr<-unique(object@features$seqnames)
+	p<-plotIdeogram(genome=object@genome,subchr=mychr,zoom.region=c(myStart,myEnd))
+	p
+	
+}
+
+.plot2<-function(object,...){
+	#Ideogram
+	ideoTrack<-.ideogram(object)
+	
+	#Expression levels
+	expressionTrack<-expressionPlot(isoforms(object),facet=T,...)+theme_bw() + theme(legend.position='none')
+	hasAxis(expressionTrack)<-TRUE
+	
+	#Transcript Models
+	#modelTrack<-autoplot(.asGRangesList(object),aes(fill=transcript,group=transcript),gap.geom="arrow") + theme_bw() + scale_fill_hue(l=50,h.start=200) + scale_color_hue(l=50,h.start=200)
+	modelTrack<-ggplot(as.GRangesList(object),)
+	
+	hasAxis(modelTrack)<-TRUE
+	
+	#Plot it all...
+	tracks(ideoTrack,modelTrack,expressionTrack,heights=c(1,3,3),fixed=c(TRUE,TRUE,FALSE),main=unique(object@annotation$gene_short_name))
+	
+}
+
+.pie<-function(object,level="isoforms",pseudocount=0.0001,...){
+	dat<-fpkm(slot(object,level))
+	colnames(dat)[1]<-'tracking_id'
+	#dat$fpkm<-dat$fpkm+pseudocount
+	#print(dat)
+	p<-ggplot(dat,aes(x="",y=fpkm,fill=tracking_id))
+	
+	p<- p + geom_bar(stat="identity",position="fill",line="black")
+	
+	p<- p + coord_polar(theta='y')
+	
+	p<-p + scale_fill_hue(l=50,h.start=200) + scale_color_hue(l=50,h.start=200) + theme_bw()
+	
+	p<-p + facet_wrap('sample_name') + theme(axis.text.x = element_blank(),aspect.ratio=1)
+	
+	p
+}
+
+setMethod("csPie",signature(object="CuffGene"),.pie)
+
 #################
 #Coersion methods
 #################
 #As GRanges
-.asGRanges<-function(object){
+.as.GRanges<-function(from){
 	#featCols<-c('seqnames','start','end','source','gene_id','exon_number','isoform_id','isoform_id','exon_number','strand')
-	feats<-object@features
+	feats<-from@features
 	#newColnames<-c('seqnames','start','end','feature','gene','exon','transcript','symbol','rank','strand')
+	#ExpressionValues (transcript)
+	fpkm<-cbind(isoform_id=rownames(fpkmMatrix(isoforms(from))),fpkmMatrix(isoforms(from)))
+	feats<-merge(feats,fpkm)
 	colnames(feats)[colnames(feats)=='isoform_id']<-'transcript'
 	colnames(feats)[colnames(feats)=='gene_id']<-'gene'
 	colnames(feats)[colnames(feats)=='exon_number']<-'exon'
 	colnames(feats)[colnames(feats)=='source']<-'feature'
 	feats$symbol<-feats$transcript
-	corCols<-c('seqnames','start','end','strand')
+	corCols<-c('seqnames','start','end','strand','width')
 	myGR<-GRanges(Rle(feats$seqnames),ranges=IRanges(feats$start,end=feats$end),strand=Rle(feats$strand),elementMetadata=feats[,!colnames(feats) %in% corCols])
+	colnames(elementMetadata(myGR))<-colnames(feats[,!colnames(feats) %in% corCols])
 	myGR
 }
 
+setAs("CuffGene","GRanges",.as.GRanges)
+
 #As GRangesList
+.as.GRangesList<-function(object,f="transcript"){
+	gr<-as(object,"GRanges")
+	grl<-split(gr,f)
+	grl
+}
+setMethod("as.GRangesList",signature(object="CuffGene"),.as.GRangesList)
+
+
+#######################
+# ggbio integration
+#######################
+#setMethod("ggplot", "CuffGene", function(data, ...){
+#			df <- mold(as.GRangesList(data))
+#			g <- ggplot(df, ...)
+#			g$.data <- as.GRangesList(data)
+#			g <- ggbio(g)
+#			g
+#		})

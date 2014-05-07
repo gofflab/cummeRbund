@@ -92,12 +92,52 @@ setMethod("fpkm",signature="CuffFeature",.fpkm)
 
 setMethod("fpkmMatrix",signature(object="CuffFeature"),.fpkmMatrix)
 
+#TODO: Replicate FPKM and Replicate FPKM Matrix for cuffFeature objects
+
+.repFpkmMatrix<-function(object,fullnames=FALSE,repIdList){
+	#Sample subsetting
+	if(!missing(repIdList)){
+		if (!all(repIdList %in% replicates(object))){
+			stop("Replicate does not exist!")
+		}else{
+			myReps<-repIdList
+		}
+	}else{
+		myReps<-replicates(object)
+	}
+	if(fullnames){
+		res<-repFpkm(object,features=TRUE)
+		res$tracking_id<-paste(res$gene_short_name,res[,1],sep="|")
+	}else{
+		res<-repFpkm(object)
+		colnames(res)[1]<-"tracking_id"	
+	}
+	selectedRows<-c('tracking_id','rep_name','fpkm')
+	res<-res[,selectedRows]
+	res<-melt(res)
+	res<-dcast(res,tracking_id~rep_name)
+	res<-data.frame(res[,-1],row.names=res[,1])
+	if(!missing(repIdList)){
+		res<-res[,myReps]
+	}
+	res
+}
+
+setMethod("repFpkmMatrix",signature(object="CuffFeature"),.repFpkmMatrix)
+
 .samples<-function(object){
 	res<-fpkm(object)$sample_name
 	res
 }
 
 setMethod("samples","CuffFeature",.samples)
+
+.replicates<-function(object){
+	res<-repFpkm(object)$rep_name
+	res
+}
+
+setMethod("replicates","CuffFeature",.replicates)
 
 
 #setMethod("diff","CuffFeature",function(object){
@@ -166,7 +206,7 @@ setMethod("count",signature(object="CuffFeature"),.count)
 
     p<-ggplot(dat,aes(x=sample_name,y=fpkm,fill=sample_name))
     
-	p <- p + geom_bar()
+	p <- p + geom_bar(stat="identity")
 	
 	if(replicates){
 		p <- p + geom_point(aes(x=sample_name,y=fpkm),size=3,shape=18,colour="black",data=repDat)
@@ -215,7 +255,7 @@ setMethod("count",signature(object="CuffFeature"),.count)
 setMethod("expressionBarplot",signature(object="CuffFeature"),.barplot)
 
 
-.expressionPlot<-function(object,logMode=FALSE,pseudocount=1.0, drawSummary=FALSE, sumFun=mean_cl_boot, showErrorbars=TRUE,showStatus=TRUE,replicates=FALSE,...){
+.expressionPlot<-function(object,logMode=FALSE,pseudocount=1.0, drawSummary=FALSE, sumFun=mean_cl_boot, showErrorbars=TRUE,showStatus=TRUE,replicates=FALSE,facet=TRUE,...){
 	#Coloring scheme for quant flags
 	quant_types<-c("OK","FAIL","LOWDATA","HIDATA","TOOSHORT")
 	quant_types<-factor(quant_types,levels=quant_types)
@@ -285,7 +325,9 @@ setMethod("expressionBarplot",signature(object="CuffFeature"),.barplot)
 	#Recolor quant flags
 	#for some reason this doesn't work (ggplot2 problem)
 	#p<- p+ scale_colour_manual(name='quant_status',values=quant_colors)
-	p<-p+facet_wrap('tracking_id')
+	if(facet){
+		p<-p+facet_wrap('tracking_id')
+	}
 	p
 }
 

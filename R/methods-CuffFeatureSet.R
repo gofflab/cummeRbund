@@ -251,6 +251,20 @@ setMethod("repCountMatrix",signature(object="CuffFeatureSet"),.repCountMatrix)
 
 setMethod("diffData",signature(object="CuffFeatureSet"),.diffData)
 
+.diffTable<-function(object,logCutoffValue=99999){
+	measureVars<-c('status','value_1','value_2','log2_fold_change','test_stat','p_value','q_value','significant')
+	all.diff<-diffData(object,features=TRUE)
+	all.diff$log2_fold_change[all.diff$log2_fold_change>=logCutoffValue]<-Inf
+	all.diff$log2_fold_change[all.diff$log2_fold_change<=-logCutoffValue]<--Inf
+	all.diff.melt<-melt(all.diff,measure.vars=measureVars)
+	#all.diff.melt<-all.diff.melt[!grepl("^value_",all.diff.melt$variable),]
+	all.diff.cast<-dcast(all.diff.melt,formula=...~sample_2+sample_1+variable)
+	all.diff.cast
+}
+
+setMethod("diffTable",signature(object="CuffFeatureSet"),.diffTable)
+
+
 .count<-function(object,features=FALSE){
 	if (features){
 		return (merge(object@annotation,object@count,by=1))
@@ -310,6 +324,22 @@ setMethod("annotation","CuffFeatureSet",function(object){
       m = log10(m+pseudocount)
     }
 	
+	
+	if(is.function(rescaling))
+	{ 
+		m=rescaling(m)
+	} else {
+		if(rescaling=='column'){
+			m=scale(m, center=T)
+			m[is.nan(m)] = 0
+		}
+		if(rescaling=='row'){ 
+			m=t(scale(t(m),center=T))
+			m[is.nan(m)] = 0
+		}
+	}
+	
+	
 	## I have supplied the default cluster and euclidean distance (JSdist) - and chose to cluster after scaling
 	## if you want a different distance/cluster method-- or to cluster and then scale
 	## then you can supply a custom function 
@@ -327,20 +357,7 @@ setMethod("annotation","CuffFeatureSet",function(object){
 
 	## this is just reshaping into a ggplot format matrix and making a ggplot layer
 	
-	if(is.function(rescaling))
-	{ 
-		m=rescaling(m)
-	} else {
-		if(rescaling=='column'){
-			m=scale(m, center=T)
-		    m[is.nan(m)] = 0
-		}
-		if(rescaling=='row'){ 
-			m=t(scale(t(m),center=T))
-		    m[is.nan(m)] = 0
-	    }
-	}
-	
+
 	rows=dim(m)[1]
 	cols=dim(m)[2]
 	
@@ -430,6 +447,135 @@ setMethod("annotation","CuffFeatureSet",function(object){
 setMethod("csHeatmap",signature("CuffFeatureSet"),.ggheat)
 
 
+.fcheatmap<-function(object, control_condition, replicate_num=NULL, clustering='none', labCol=T, labRow=T, logMode=F, pseudocount=1.0, 
+		border=FALSE, heatscale=c(low='steelblue',mid='white',high='tomato'), heatMidpoint=0,fullnames=T,replicates=FALSE,method='none',heatRange=3, ...) {
+	## the function can be be viewed as a two step process
+	## 1. using the rehape package and other funcs the data is clustered, scaled, and reshaped
+	## using simple options or by a user supplied function
+	## 2. with the now resahped data the plot, the chosen labels and plot style are built
+
+	if(replicates){
+	    if (is.null(replicate_num)){
+	        print ("Error: if replicates == TRUE, you must specify both a control condition and a replicate number")
+	        return()
+	    }
+		m=repFpkmMatrix(object,fullnames=fullnames)
+		selected_rep <- paste(control_condition,replicate_num,sep="_")
+		
+		#remove genes with no expression in any condition
+    	m=m[!apply(m,1,sum)==0,]
+    	m=log2(m/m[,selected_rep])
+		m=m[,names(m) != selected_rep]
+	}else{
+		m=fpkmMatrix(object,fullnames=fullnames)
+		#remove genes with no expression in any condition
+    	m=m[!apply(m,1,sum)==0,]
+		m=log2(m/m[,control_condition])
+		m=m[,names(m) != control_condition]
+	}
+	
+	m_vals <- unlist(as.list(m))[is.finite(unlist(as.list(m)))]
+	m_max <- max(m_vals)
+	m_min <- max(m_vals)
+	range_lim <- max(c(abs(m_max), abs(m_min)))
+	range_lim <- min(c(heatRange, range_lim))
+	m_max <- range_lim
+	m_min <- -range_lim
+	m[m <  m_min] <- m_min
+	m[m >  m_max] <- m_max
+	m[is.na(m)] <- 0
+	
+	## I have supplied the default cluster and euclidean distance (JSdist) - and chose to cluster after scaling
+	## if you want a different distance/cluster method-- or to cluster and then scale
+	## then you can supply a custom function 
+	
+	if(!is.function(method)){
+		method = dist
+	}
+
+	if(clustering=='row')
+		m=m[hclust(method(m))$order, ]
+	if(clustering=='column')  
+		m=m[,hclust(method(t(m)))$order]
+	if(clustering=='both')
+		m=m[hclust(method(m))$order ,hclust(method(t(m)))$order]
+	
+	rows=dim(m)[1]
+	cols=dim(m)[2]
+
+    melt.m=cbind(rowInd=rep(1:rows, times=cols), colInd=rep(1:cols, each=rows), melt(m))
+
+	g=ggplot(data=melt.m)
+	
+	## add the heat tiles with or without a white border for clarity
+	
+	if(border==TRUE)
+		g2=g+geom_rect(aes(xmin=colInd-1,xmax=colInd,ymin=rowInd-1,ymax=rowInd, fill=value),colour='grey')
+	if(border==FALSE)
+		g2=g+geom_rect(aes(xmin=colInd-1,xmax=colInd,ymin=rowInd-1,ymax=rowInd, fill=value))
+	
+	## add axis labels either supplied or from the colnames rownames of the matrix
+	
+	if(labCol==T) 
+	{
+		g2=g2+scale_x_continuous(breaks=(1:cols)-0.5, labels=colnames(m))
+	}
+	if(labCol==F) 
+	{
+		g2=g2+scale_x_continuous(breaks=(1:cols)-0.5, labels=rep('',cols))
+	}
+	
+	
+	if(labRow==T) 
+	{
+		g2=g2+scale_y_continuous(breaks=(1:rows)-0.5, labels=rownames(m))	
+	}
+	if(labRow==F)
+	{ 
+		g2=g2+scale_y_continuous(breaks=(1:rows)-0.5, labels=rep('',rows))	
+	}
+	
+	# Get rid of the ticks, they get way too dense with lots of rows
+    g2 <- g2 + theme(axis.ticks = element_blank()) 
+
+	## get rid of grey panel background and gridlines
+	
+	g2=g2+theme(panel.grid.minor=element_line(colour=NA), panel.grid.major=element_line(colour=NA),
+			panel.background=element_rect(fill=NA, colour=NA))
+	
+	##adjust x-axis labels
+	g2=g2+theme(axis.text.x=element_text(angle=-90, hjust=0))
+
+    #write(paste(c("Length of heatscale is :", length(heatscale))), stderr())
+    if(replicates){
+        legendTitle <- bquote(paste(log[2], frac("FPKM",.(selected_rep),sep="")))
+    }else{
+    	legendTitle <- bquote(paste(log[2], frac("FPKM",.(control_condition),sep="")))
+	}
+	#legendTitle <- paste(expression(plain(log)[10])," FPKM + ",pseudocount,sep="")
+
+	if (length(heatscale) == 2){
+	    g2 <- g2 + scale_fill_gradient(low=heatscale[1], high=heatscale[2], name=legendTitle)
+	} else if (length(heatscale) == 3) {
+	    if (is.null(heatMidpoint))
+	    {
+	        heatMidpoint = (max(m) + min(m)) / 2.0
+	        #write(heatMidpoint, stderr())
+	    }
+
+	    g2 <- g2 + scale_fill_gradient2(low=heatscale[1], mid=heatscale[2], high=heatscale[3], midpoint=heatMidpoint, name=legendTitle)
+	}
+	
+	#g2<-g2+scale_x_discrete("",breaks=tracking_ids,labels=gene_short_names)
+	
+	
+	## finally add the fill colour ramp of your choice (default is blue to red)-- and return
+	return (g2)
+	
+}
+
+setMethod("csFoldChangeHeatmap",signature("CuffFeatureSet"),.fcheatmap)
+
 # Distance Heatmaps
 .distheat<-function(object, replicates=F, samples.not.genes=T, logMode=T, pseudocount=1.0, heatscale=c(low='lightyellow',mid='orange',high='darkred'), heatMidpoint=NULL, ...) {
   # get expression from a sample or gene perspective
@@ -493,7 +639,8 @@ setMethod("csDistHeat", signature("CuffFeatureSet"), .distheat)
 
 #Scatterplot
 .scatter<-function(object,x,y,logMode=TRUE,pseudocount=0.0,labels, smooth=FALSE,colorByStatus=FALSE,...){
-	dat<-fpkmMatrix(object)
+	dat<-fpkmMatrix(object,fullnames=T)
+	
 	samp<-samples(object)
 	
 	#check to make sure x and y are in samples
@@ -508,6 +655,16 @@ setMethod("csDistHeat", signature("CuffFeatureSet"), .distheat)
 		}
 	}
 	
+	#Attach tracking_id and gene_short_name
+	if(!missing(labels)){
+		require(stringr)
+		tracking<-str_split_fixed(rownames(dat),"\\|",2)
+		dat$gene_short_name<-tracking[,1]
+		dat$tracking_id<-tracking[,2]
+
+		labeled.dat<-dat[dat$gene_short_name %in% labels,]
+	}
+	
 	#make plot object
 	p<-ggplot(dat)
 	p<- p + aes_string(x=x,y=y)
@@ -519,15 +676,11 @@ setMethod("csDistHeat", signature("CuffFeatureSet"), .distheat)
 	}
 	
 	#Add highlights from labels
-#	if(!missing(labels)){
-#		labelIdx<-fData(object)$gene_short_name %in% labels
-#		labelfp<-fp[labelIdx,]
-#		labelfp$gene_short_name<-fData(object)$gene_short_name[labelIdx]
-#		#print(head(labelfp))
-#		p <- p + geom_point(data=labelfp,size=1.2,color="red")
-#		p <- p + geom_text(data=labelfp,aes(label=gene_short_name),color="red",hjust=0,vjust=0,angle=45,size=2)
-#	}
-#	
+	if(!missing(labels)){
+		p <- p + geom_point(data=labeled.dat,aes_string(x=x,y=y),size=1.3,color="red")
+		p <- p + geom_text(data=labeled.dat,aes_string(x=x,y=y,label='gene_short_name'),color="red",hjust=0,vjust=0,angle=0,size=4)
+	}
+	
 	#logMode
 	if(logMode){
 		p <- p + scale_y_log10() + scale_x_log10()
@@ -546,6 +699,8 @@ setMethod("csDistHeat", signature("CuffFeatureSet"), .distheat)
 	#p<- p + labs(title=object@tables$mainTable)
 	p
 }
+
+#.scatter(sigGenes,'P7_lincBrn1b_KO_Brain','P7_WT_Brain',labels=c('Arc'))
 
 setMethod("csScatter",signature(object="CuffFeatureSet"), .scatter)
 
@@ -777,14 +932,18 @@ setMethod("expressionPlot",signature(object="CuffFeatureSet"),.expressionPlot)
 #	c
 #}
 
-.cluster<-function(object, k, logMode=T, pseudocount=1,...){
+.cluster<-function(object, k, logMode=T, method='none', pseudocount=1,...){
 	require(cluster)
 	m<-as.data.frame(fpkmMatrix(object))
 	m<-m[rowSums(m)>0,]
 	if(logMode){
 		m<-log10(m+pseudocount)
 	}
-	n<-JSdist(makeprobs(t(m)))
+	
+	if(!is.function(method)){
+		method = function(mat){JSdist(makeprobs(t(m)))}	
+	}		
+	n<-method(m)
 	clusters<-pam(n,k, ...)
 	#clsuters<-pamk(n,krange=2:20)
 	class(clusters)<-"list"
@@ -794,32 +953,58 @@ setMethod("expressionPlot",signature(object="CuffFeatureSet"),.expressionPlot)
 
 setMethod("csCluster",signature(object="CuffFeatureSet"),.cluster)
 
-.ratioCluster<-function(object,k,ratioTo=NULL,...){
+.ratioCluster<-function(object,k,ratioTo=NULL,pseudocount=0.0001,...){
 	require(cluster)
-	m<-as.data.frame(fpkmMatrix(object))
+	m<-as.data.frame(fpkmMatrix(object)+pseudocount)
 	#TODO: ensure that ratioTo is in colnames(fpkmMatrix(object))
 	m.ratio<-m/m[[ratioTo]]
 	m.log.ratio<-log2(m.ratio)
 	n<-dist(m.log.ratio)
 	clusters<-pam(n,k,...)
 	class(clusters)<-"list"
-	clusters$ratio<-m
+	clusters$fpkm<-m
 	clusters
 }
 
-csClusterPlot<-function(clustering,pseudocount=1.0,drawSummary=TRUE, sumFun=mean_cl_boot){
+csClusterPlot<-function(clustering,pseudocount=1.0,logMode=FALSE,drawSummary=TRUE, sumFun=mean_cl_boot){
 	m<-clustering$fpkm+pseudocount
 	m$ids<-rownames(clustering$fpkm)
 	m$cluster<-factor(clustering$clustering)
 	m.melt<-melt(m,id.vars=c("ids","cluster"))
 	c<-ggplot(m.melt)
-	c<-c+geom_line(aes(x=variable,y=value,color=cluster,group=ids)) + facet_wrap('cluster',scales='free')+scale_y_log10()
+	c<-c+geom_line(aes(x=variable,y=value,color=cluster,group=ids)) + theme_bw() + facet_wrap('cluster',scales='free_y')
 	if(drawSummary){
 		c <- c + stat_summary(aes(x=variable,y=value,group=1),fun.data=sumFun,color="black",fill="black",alpha=0.2,size=1.1,geom="smooth")
 	}
-	c<-c + scale_color_hue(l=50,h.start=200)
+	if(logMode){
+		c<-c + scale_y_log10()
+	}
+	c<-c + scale_color_hue(l=50,h.start=200) + theme(axis.text.x=element_text(angle=-90,hjust=0))
 	c
 }
+
+.findK<-function(object, k.range=c(2:20), logMode=T, pseudocount=1,...){
+	require(cluster)
+	m<-as.data.frame(fpkmMatrix(object))
+	m<-m[rowSums(m)>0,]
+	if(logMode){
+		m<-log10(m+pseudocount)
+	}
+	n<-JSdist(makeprobs(t(m)))
+	myWidths<-c()
+	for (k in k.range){
+		print(k)
+		myWidths<-c(myWidths,pam(n,k,...)$silinfo$avg.width)
+	}
+	plot(k.range,myWidths)
+}
+	
+	
+	
+
+######################
+# 
+######################
 
 .dendro<-function(object,logMode=T,pseudocount=1,replicates=FALSE){
 	if(replicates){
@@ -869,6 +1054,30 @@ setMethod("csDendro",signature(object="CuffFeatureSet"),.dendro)
 #	c
 #}
 
+######################
+# Exploratory Analysis
+######################
+.nmf<-function(object,k,logMode=T,pseudocount=1,maxiter=1000,replicates=FALSE,fullnames=FALSE){
+	require(NMFN)
+	if(missing(k)) stop("Please provide a rank value for factorization (arg=k)")
+	
+	if(replicates){
+		m=repFpkmMatrix(object,fullnames=fullnames)
+	}else{
+		m=fpkmMatrix(object,fullnames=fullnames)
+	}
+	
+	if(logMode) 
+	{
+		m = log10(m+pseudocount)
+	}
+	
+	myNMF<-nnmf(m,k=k,maxiter=maxiter)
+	return (myNMF)
+}
+
+setMethod("csNMF",signature(object="CuffFeatureSet"),.nmf)
+
 .density<-function(object, logMode = TRUE, pseudocount=0.0, labels, features=FALSE, replicates=FALSE,...){
 	if(replicates){
 		dat<-repFpkm(object,features=features)
@@ -896,6 +1105,65 @@ setMethod("csDendro",signature(object="CuffFeatureSet"),.dendro)
 
 setMethod("csDensity",signature(object="CuffFeatureSet"),.density)
 
+#################
+# Dimensionality Reduction (use sparingly for Gene Sets)
+#################
+
+.MDSplot<-function(object,replicates=FALSE,logMode=TRUE,pseudocount=1.0){
+	if(replicates){
+		dat<-repFpkmMatrix(object)
+		#repData<-sapply(replicates(object),function(x){strsplit(x,"_")[[1]][1]}) This is to color by condition and not replicate...
+	}else{
+		dat<-fpkmMatrix(object)
+	}
+	
+	if(logMode){
+		dat<-log10(dat+pseudocount)
+	}
+	
+	d<-JSdist(makeprobs(dat))
+	fit <- cmdscale(d,eig=TRUE, k=2)
+	res<-data.frame(names=rownames(fit$points),M1=fit$points[,1],M2=fit$points[,2])
+	p <- ggplot(res)
+	p <- p + geom_point(aes(x=M1,y=M2,color=names)) + geom_text(aes(x=M1,y=M2,label=names,color=names)) + theme_bw()
+	p
+}
+
+setMethod("MDSplot",signature(object="CuffFeatureSet"),.MDSplot)
+
+.PCAplot<-function(object,x="PC1", y="PC2",replicates=FALSE,pseudocount=1.0,scale=TRUE,showPoints=TRUE,...){
+	if(replicates){
+		fpkms<-repFpkmMatrix(object)
+	}else{
+		fpkms<-fpkmMatrix(object)
+	}
+	fpkms<-log10(fpkms+pseudocount)
+	PC<-prcomp(fpkms,scale=scale,...)
+	dat <- data.frame(obsnames=row.names(PC$x), PC$x)
+	#dat$shoutout<-""
+	#dat$shoutout[matchpt(PC$rotation,PC$x)$index]<-rownames(pca$x[matchpt(pca$rotation,pca$x)$index,])
+	plot <- ggplot(dat, aes_string(x=x, y=y)) 
+	if(showPoints){
+		plot<- plot + geom_point(alpha=.4, size=0.8, aes(label=obsnames))
+	}
+	plot <- plot + geom_hline(aes(0), size=.2) + geom_vline(aes(0), size=.2) #+ geom_text(aes(label=shoutout),size=2,color="red")
+	datapc <- data.frame(varnames=rownames(PC$rotation), PC$rotation)
+	mult <- min(
+			(max(dat[,y]) - min(dat[,y])/(max(datapc[,y])-min(datapc[,y]))),
+			(max(dat[,x]) - min(dat[,x])/(max(datapc[,x])-min(datapc[,x])))
+	)
+	datapc <- transform(datapc,
+			v1 = .7 * mult * (get(x)),
+			v2 = .7 * mult * (get(y))
+	)
+	plot <- plot + 
+			#coord_equal() + 
+			geom_text(data=datapc, aes(x=v1, y=v2, label=varnames,color=varnames), vjust=1)
+	plot <- plot + geom_segment(data=datapc, aes(x=0, y=0, xend=v1, yend=v2,color=varnames), arrow=arrow(length=unit(0.2,"cm")), alpha=0.75) + theme_bw()
+	plot
+}
+
+setMethod('PCAplot',signature(object="CuffFeatureSet"),.PCAplot)
 
 #################
 #Misc			#

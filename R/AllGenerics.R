@@ -13,6 +13,7 @@ setGeneric("samples",function(object) standardGeneric("samples"))
 setGeneric("replicates",function(object) standardGeneric("replicates"))
 setGeneric("conditions",function(object) standardGeneric("conditions"))
 setGeneric("runInfo",function(object) standardGeneric("runInfo"))
+setGeneric("varModel",function(object) standardGeneric("varModel"))
 setGeneric("genes",function(object) standardGeneric("genes"))
 setGeneric("isoforms",function(object) standardGeneric("isoforms"))
 setGeneric("TSS",function(object) standardGeneric("TSS"))
@@ -25,7 +26,7 @@ setGeneric("getGenes",function(object,geneIdList,sampleIdList=NULL) standardGene
 setGeneric("getGeneId",function(object,idList) standardGeneric("getGeneId"))
 setGeneric("findGene",function(object,query) standardGeneric("findGene"))
 setGeneric("getFeatures",function(object,featureIdList,sampleIdList=NULL,...) standardGeneric("getFeatures"))
-setGeneric("getSig", function(object,x,y,alpha=0.05,level="genes") standardGeneric("getSig"))
+setGeneric("getSig", function(object,x,y,alpha=0.05,level="genes",method="BH",useCuffMTC=FALSE) standardGeneric("getSig"))
 setGeneric("getSigTable", function(object,alpha=0.05,level='genes') standardGeneric("getSigTable"))
 setGeneric("addFeatures",function(object, features, ...) standardGeneric("addFeatures"))
 setGeneric("findSimilar",function(object,x,n,...) standardGeneric("findSimilar"))
@@ -38,7 +39,7 @@ setGeneric("sigMatrix",function(object,alpha=0.05,level='genes',orderByDist=F) s
 
 #CuffData generics
 setGeneric("features",function(object) standardGeneric("features"))
-setGeneric("featureNames",function(object) standardGeneric("featureNames"))
+#setGeneric("featureNames",function(object) standardGeneric("featureNames"))
 setGeneric("fpkm",function(object, features=FALSE,...) standardGeneric("fpkm"))
 setGeneric("repFpkm",function(object,features=FALSE,...) standardGeneric("repFpkm"))
 setGeneric("count",function(object,...) standardGeneric("count"))
@@ -61,6 +62,7 @@ setGeneric("csVolcanoMatrix",function(object,replicates=FALSE,logMode=TRUE,...) 
 setGeneric("MDSplot",function(object,replicates=FALSE,logMode=TRUE,...) standardGeneric("MDSplot"))
 setGeneric("PCAplot",function(object,x="PC1", y="PC2",replicates=TRUE,pseudocount=1.0,scale=TRUE,...) standardGeneric("PCAplot"))
 setGeneric("fpkmSCVPlot",function(object,FPKMLowerBound=1,...) standardGeneric("fpkmSCVPlot"))
+setGeneric("csNMF",function(object,k,...) standardGeneric("csNMF"))
 
 #CuffDist generics
 setGeneric("distValues",function(object, x, y,...) standardGeneric("distValues"))
@@ -85,6 +87,7 @@ setGeneric("csBoxplot",function(object, logMode=T, ...) standardGeneric("csBoxpl
 #CuffFeatureSet
 #################
 setGeneric("csHeatmap",function(object,rescaling='none', clustering='none', labCol=T, labRow=T, logMode=T, pseudocount=1.0, border=FALSE, heatscale= c(low='darkred',mid='orange',high='white'), heatMidpoint=NULL, ...) standardGeneric("csHeatmap"))
+setGeneric("csFoldChangeHeatmap",function(object, control_condition, replicate_num=NULL, clustering='none', labCol=T, labRow=T, logMode=F, pseudocount=1.0, border=FALSE, heatscale=c(low='steelblue',mid='white',high='tomato'), heatMidpoint=0,fullnames=T,replicates=FALSE,method='none',heatRange=3, ...) standardGeneric("csFoldChangeHeatmap"))
 setGeneric("csDistHeat",function(object, replicates=F, samples.not.genes=T, logMode=T, pseudocount=1.0, heatscale=c(low='lightyellow',mid='orange',high='darkred'), heatMidpoint=NULL, ...) standardGeneric("csDistHeat"))
 setGeneric("csCluster",function(object, k, logMode=T, pseudocount=1,...) standardGeneric("csCluster"))
 #setGeneric("csClusterPlot",function(clustering, pseudocount=1.0) standardGeneric("csClusterPlot"))
@@ -98,6 +101,8 @@ setGeneric("csDendro",function(object,logMode=T,pseudocount=1,replicates=FALSE,.
 ##################
 setGeneric("genePlot",function(object) standardGeneric("genePlot"))
 setGeneric("makeGeneRegionTrack",function(object) standardGeneric("makeGeneRegionTrack"))
+setGeneric("as.GRangesList",function(object,f="transcript") standardGeneric("as.GRangesList"))
+setGeneric("csPie",function(object,...) standardGeneric("csPie"))
 
 
 ##############

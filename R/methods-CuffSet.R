@@ -11,7 +11,7 @@
 setMethod("initialize","CuffSet",
 		function(.Object,
 				DB,
-				runInfo=data.frame(),
+				#runInfo=data.frame(),
 				phenoData=data.frame(),
 				conditions=data.frame(),
 				genes,
@@ -24,7 +24,7 @@ setMethod("initialize","CuffSet",
 				...){
 			.Object<-callNextMethod(.Object,
 					DB = DB,
-					runInfo=runInfo,
+					#runInfo=runInfo,
 					phenoData=phenoData,
 					conditions = conditions,
 					genes = genes,
@@ -109,6 +109,13 @@ setMethod("DB","CuffSet",function(object){
 }
 
 setMethod("runInfo","CuffSet",.runInfo)
+
+.varModel<-function(object){
+	varModelQuery<-"SELECT * from varModel"
+	dbGetQuery(object@DB,varModelQuery)
+}
+
+setMethod("varModel","CuffSet",.varModel)
 
 #setMethod("phenoData","CuffSet",function(object){
 #			return(object@phenoData)
@@ -324,8 +331,10 @@ setMethod("getGene",signature(object="CuffSet"),.getGene)
 	}
 	sampleString<-substr(sampleString,1,nchar(sampleString)-1)
 	sampleString<-paste(sampleString,")",sep="")
+
 	
-	#ID Search String (SQL)
+	#idQuery<-paste('SELECT DISTINCT x.gene_id from genes x WHERE (x.gene_id IN ',origIdString,' OR x.gene_short_name IN ',origIdString,')',sep="")
+
 	idString<-'('
 	for (i in geneIdList){
 		idString<-paste(idString,"'",i,"',",sep="")
@@ -333,12 +342,14 @@ setMethod("getGene",signature(object="CuffSet"),.getGene)
 	idString<-substr(idString,1,nchar(idString)-1)
 	idString<-paste(idString,")",sep="")
 	
-	whereStringGene<-paste('WHERE (x.gene_id IN ',idString,' OR x.gene_short_name IN ',idString,')',sep="")
-	whereStringGeneFPKM<-paste('WHERE (x.gene_id IN ',idString,' OR x.gene_short_name IN ',idString,')',sep="")
-	whereStringGeneDiff<-paste('WHERE (x.gene_id IN ',idString,' OR x.gene_short_name IN ',idString,')',sep="")
-	whereString<-paste('WHERE (x.gene_id IN ',idString,' OR g.gene_short_name IN ',idString,')',sep="")
-	whereStringFPKM<-paste('WHERE (x.gene_id IN ',idString,' OR g.gene_short_name IN ',idString,')',sep="")
-	whereStringDiff<-paste('WHERE (x.gene_id IN ',idString,' OR g.gene_short_name IN ',idString,')',sep="")
+	#write(idString,stderr())
+	
+	whereStringGene<-paste('WHERE x.gene_id IN ',idString,sep="")
+	whereStringGeneFPKM<-paste('WHERE x.gene_id IN ',idString,sep="")
+	whereStringGeneDiff<-paste('WHERE x.gene_id IN ',idString,sep="")
+	whereString<-paste('WHERE x.gene_id IN ',idString,sep="")
+	whereStringFPKM<-paste('WHERE x.gene_id IN ',idString,sep="")
+	whereStringDiff<-paste('WHERE x.gene_id IN ',idString,sep="")
 	
 	if(!is.null(sampleIdList)){
 		whereStringGene<-whereStringGene
@@ -349,9 +360,6 @@ setMethod("getGene",signature(object="CuffSet"),.getGene)
 		whereStringDiff<-paste(whereStringDiff,' AND (y.sample_1 IN ',sampleString,' AND y.sample_2 IN ',sampleString,')',sep="")
 		
 	}
-	
-	#dbQueries
-	idQuery<-paste("SELECT DISTINCT gene_id from genes x ",whereStringGene,sep="")
 	
 	#geneAnnotationQuery<-paste("SELECT * from genes x LEFT JOIN geneFeatures xf ON x.gene_id=xf.gene_id ", whereStringGene,sep="")
 	geneAnnotationQuery<-paste("SELECT * from genes x LEFT JOIN geneFeatures xf USING (gene_id) ", whereStringGene,sep="")
@@ -474,7 +482,7 @@ setMethod("getGene",signature(object="CuffSet"),.getGene)
 	
 	res<-new("CuffGeneSet",
 			#TODO: Fix ids so that it only displays those genes in CuffGeneSet
-			ids=as.character(dbGetQuery(object@DB,idQuery)),
+			ids=geneIdList,
 			annotation=genes.annot,
 			fpkm=genes.fpkm,
 			diff=genes.diff,
@@ -707,7 +715,7 @@ setMethod("getFeatures",signature(object="CuffSet"),.getFeatures)
 #	
 #}
 
-.getSig<-function(object,x,y,alpha=0.05,level='genes'){
+.getSig<-function(object,x,y,alpha=0.05,level='genes',method="BH",useCuffMTC=FALSE){
 	mySamp<-samples(slot(object,level))
 	
 	if(level %in% c('promoters','splicing','relCDS')){
@@ -723,12 +731,14 @@ setMethod("getFeatures",signature(object="CuffSet"),.getFeatures)
 			stop("One or more values of 'x' or 'y' are not valid sample names!")
 		}
 	}
-	
 	queryString<-paste("(",paste(mySamp,collapse="','",sep=""),")",sep="'")
-	sql<-paste("SELECT ",slot(object,level)@idField,",p_value from ", diffTable," WHERE sample_1 IN ",queryString," AND sample_2 IN ",queryString, " AND STATUS='OK'",sep="")
+	sql<-paste("SELECT ",slot(object,level)@idField,",p_value,q_value from ", diffTable," WHERE sample_1 IN ",queryString," AND sample_2 IN ",queryString, " AND STATUS='OK'",sep="")
 	#print(sql)
 	sig<-dbGetQuery(object@DB,sql)
-	sig$q_value<-p.adjust(sig$p_value,method="BH")
+	if(!missing(x) && !missing(y) && !useCuffMTC){
+		sig$q_value<-p.adjust(sig$p_value,method=method)
+		#print(sig[order(sig$q_value,decreasing=T),])
+	}
 	sig<-sig[sig$q_value<=alpha,]
 	sigGenes<-unique(sig[[slot(object,level)@idField]])
 	sigGenes
@@ -767,6 +777,10 @@ setMethod("getSig",signature(object="CuffSet"),.getSig)
 }
 
 setMethod("getSigTable",signature(object="CuffSet"),.getSigTable)
+
+####################
+#QC Visualizations on entire dataset
+#####################
 
 .sigMatrix<-function(object,alpha=0.05,level='genes',orderByDist=FALSE){
 	if(level %in% c('promoters','splicing','relCDS')){
@@ -808,6 +822,17 @@ setMethod("getSigTable",signature(object="CuffSet"),.getSigTable)
 }
 
 setMethod("sigMatrix",signature(object="CuffSet"),.sigMatrix)
+
+#dispersionPlot on cuffSet objects actually draws from the varModel table and is the preferred way to visualize the dispersion and model fitting from cuffdiff 2.1 or greater
+.dispersionPlot<-function(object){
+	dat<-varModel(object)
+	p<-ggplot(dat)
+	p<-p + geom_point(aes(x=compatible_count_mean,y=compatible_count_var,color=condition),alpha=0.3,size=0.8) + geom_line(aes(x=compatible_count_mean,y=fitted_var),lwd=0.5,color="black") + facet_wrap('condition') +scale_y_log10() + scale_x_log10() + theme_bw() + guides(color=FALSE)
+	p
+}
+
+setMethod("dispersionPlot",signature(object="CuffSet"),.dispersionPlot)
+
 
 #Find similar genes
 .findSimilar<-function(object,x,n,distThresh,returnGeneSet=TRUE,...){
