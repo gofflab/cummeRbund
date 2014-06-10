@@ -1,7 +1,7 @@
 Package: cummeRbund
 Title: Analysis, exploration, manipulation, and visualization of
         Cufflinks high-throughput sequencing data.
-Version: 2.7.1
+Version: 2.7.2
 Date: 2013-04-22
 Author: L. Goff, C. Trapnell, D. Kelley
 Description: Allows for persistent storage, access, exploration, and manipulation of Cufflinks high-throughput sequencing data.  In addition, provides numerous plotting functions for commonly used visualizations.
@@ -19,5 +19,5 @@ Collate: AllGenerics.R AllClasses.R database-setup.R methods-CuffSet.R
 LazyLoad: yes
 biocViews: Sequencing, RNASeq, GeneExpression, DifferentialExpression,
         Infrastructure, DataImport, DataRepresentation, Visualization,
-        Bioinformatics, Clustering, MultipleComparison, QualityControl
+        Clustering, MultipleComparison, QualityControl
 Packaged: 2014-05-07 18:47:53 UTC; lgoff
