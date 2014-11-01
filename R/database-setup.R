@@ -1637,7 +1637,7 @@ COMMIT;
 	create.sql <- strsplit(create.sql, ";")[[1]]
 	create.sql <- create.sql[-length(create.sql)] #nothing to run here
 	
-	tmp <- sapply(create.sql,function(x) sqliteQuickSQL(db,x))
+	tmp <- sapply(create.sql,function(x) dbGetQuery(db,x))
 	db
 }
 
@@ -1736,7 +1736,7 @@ CREATE INDEX "varModel.varModel_locus1" ON "varModel"("locus");
 			if (verbose){
 						write(paste(x,sep=""),stderr())
 					}
-			sqliteQuickSQL(db,x)
+			dbGetQuery(db,x)
 	})
 }
 
@@ -1758,7 +1758,7 @@ populateSampleTable<-function(samples,dbConn){
 
 bulk_insert <- function(dbConn,sql,bound.data)
 {
-	dbBeginTransaction(dbConn)
+	dbBegin(dbConn)
 	dbGetPreparedQuery(dbConn, sql, bind.data = bound.data)
 	dbCommit(dbConn)
 }
@@ -1951,7 +1951,7 @@ readCufflinks<-function(dir = getwd(),
 	colnames(gr)[grepl('^p_id$',colnames(gr))]<-'CDS_id'
 	write("Writing GTF features to 'features' table...",stderr())
 	#dbSendQuery(dbConn,"DROP TABLE IF EXISTS 'features'")
-	#dbBeginTransaction(dbConn)
+	#dbBegin(dbConn)
 	dbWriteTable(dbConn,'features',gr,row.names=F,overwrite=T)
 	#record Genome build
 	.recordGenome(genomebuild,dbConn)

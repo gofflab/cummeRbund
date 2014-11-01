@@ -1,3 +1,6 @@
+v2.8.1 
+	Bugfixes:
+		- Made mimimal changes for compatibility with RSQLite 1.0.0
 v2.7.1
 	Bugfixes:
 		- Fixed 'fullnames' argument to cuffData::*Matrix() methods so that it does what it's supposed to do.
