@@ -172,6 +172,7 @@ setMethod("genePlot",signature(object="CuffGene"),.plot)
 	p<-ggplot(dat,aes(x="",y=fpkm,fill=tracking_id))
 	
 	p<- p + geom_bar(stat="identity",position="fill",color="black")
+
 	
 	p<- p + coord_polar(theta='y')
 	
