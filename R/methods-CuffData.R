@@ -961,7 +961,9 @@ setMethod("MDSplot",signature(object="CuffData"),.MDSplot)
 	if(showPoints){
 		plot<- plot + geom_point(alpha=.4, size=0.8, aes(label=obsnames))
 	}
+
 	plot <- plot + geom_hline(aes(yintercept=0), size=.2) + geom_vline(aes(xintercept=0), size=.2) #+ geom_text(aes(label=shoutout),size=2,color="red")
+
 	datapc <- data.frame(varnames=rownames(PC$rotation), PC$rotation)
 	mult <- min(
 			(max(dat[,y]) - min(dat[,y])/(max(datapc[,y])-min(datapc[,y]))),
