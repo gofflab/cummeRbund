@@ -2014,7 +2014,7 @@ readCufflinks<-function(dir = getwd(),
 	tmpS <- split(tmp, values(tmp)$transcript_id)
 	if(verbose) message('Attempting to create the splicings data.frame')
 	splicings <- data.frame(
-			tx_id=rep(1:length(tmpS), elementLengths(tmpS)),
+			tx_id=rep(1:length(tmpS), elementNROWS(tmpS)),
 			exon_rank=as.integer(values(unlist(tmpS))$exon_number),
 			exon_chrom=as.character(seqnames(unlist(tmpS))),
 			exon_strand=as.character(strand(unlist(tmpS))),
