@@ -1950,7 +1950,8 @@ readCufflinks<-function(dir = getwd(),
 		stop("Must provide a dbConn connection")
 
 	write("Reading GTF file",stderr())
-	gr<-import(gtfFile,asRangedData=FALSE)
+
+	gr<-import(gtfFile)
 	gr<-as(gr,"data.frame")
 	#gr$genome<-genomebuild
 	colnames(gr)[grepl('^transcript_id$',colnames(gr))]<-'isoform_id'
@@ -1981,7 +1982,11 @@ readCufflinks<-function(dir = getwd(),
 	requiredAttribs <- c("gene_id", "transcript_id", "exon_number")
 
 	if (verbose) message("Importing ", gtfFile)
+<<<<<<< HEAD
 	tmp <- import(gtfFile, asRangedData=FALSE)
+=======
+	tmp <- import(gtfFile)
+>>>>>>> a4a2fc9b30204a4d0b68f44cdbaa7a8b7000efbe
 
 	#dispose of unspliced unstranded transcripts
 	#tmp <- tmp[ which(strand(tmp) %in% c('+','-')) ]
@@ -2014,7 +2019,11 @@ readCufflinks<-function(dir = getwd(),
 	tmpS <- split(tmp, values(tmp)$transcript_id)
 	if(verbose) message('Attempting to create the splicings data.frame')
 	splicings <- data.frame(
+<<<<<<< HEAD
 			tx_id=rep(1:length(tmpS), elementLengths(tmpS)),
+=======
+			tx_id=rep(1:length(tmpS), elementNROWS(tmpS)),
+>>>>>>> a4a2fc9b30204a4d0b68f44cdbaa7a8b7000efbe
 			exon_rank=as.integer(values(unlist(tmpS))$exon_number),
 			exon_chrom=as.character(seqnames(unlist(tmpS))),
 			exon_strand=as.character(strand(unlist(tmpS))),
@@ -2033,7 +2042,11 @@ readCufflinks<-function(dir = getwd(),
 
 	#create the db
 	if (verbose) message("Creating TranscriptDb")
+<<<<<<< HEAD
 	tmpdb <- makeTranscriptDb(transcripts, splicings, genes=genes)
+=======
+	tmpdb <- makeTxDb(transcripts, splicings, genes=genes)
+>>>>>>> a4a2fc9b30204a4d0b68f44cdbaa7a8b7000efbe
 	if (verbose) message("Use saveFeatures() to save the database to a file")
 	return(tmpdb)
 
