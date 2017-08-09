@@ -1950,6 +1950,7 @@ readCufflinks<-function(dir = getwd(),
 		stop("Must provide a dbConn connection")
 
 	write("Reading GTF file",stderr())
+
 	gr<-import(gtfFile)
 	gr<-as(gr,"data.frame")
 	#gr$genome<-genomebuild
@@ -2014,7 +2015,9 @@ readCufflinks<-function(dir = getwd(),
 	tmpS <- split(tmp, values(tmp)$transcript_id)
 	if(verbose) message('Attempting to create the splicings data.frame')
 	splicings <- data.frame(
+
 			tx_id=rep(1:length(tmpS), elementNROWS(tmpS)),
+
 			exon_rank=as.integer(values(unlist(tmpS))$exon_number),
 			exon_chrom=as.character(seqnames(unlist(tmpS))),
 			exon_strand=as.character(strand(unlist(tmpS))),
@@ -2033,7 +2036,9 @@ readCufflinks<-function(dir = getwd(),
 
 	#create the db
 	if (verbose) message("Creating TranscriptDb")
+
 	tmpdb <- makeTxDb(transcripts, splicings, genes=genes)
+
 	if (verbose) message("Use saveFeatures() to save the database to a file")
 	return(tmpdb)
 
