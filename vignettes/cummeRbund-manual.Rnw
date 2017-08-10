@@ -944,7 +944,7 @@ to add additional tracks from an external data source.
 \textit{Note: This feature is now deprecated owing to developmental constraints.
 It is still provided with cummeRbund, but is no longer supported.}
 
-<<features_3,fig=TRUE>>=
+<<features_3,fig=TRUE,eval=FALSE,echo=FALSE>>=
 trackList<-list()
 myStart<-min(features(myGene)$start)
 myEnd<-max(features(myGene)$end)
