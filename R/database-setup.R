@@ -1759,7 +1759,8 @@ getSamplesFromColnames<-function(fpkmDF){
 
 populateSampleTable<-function(samples,dbConn){
 	samples<-make.db.names(dbConn,samples,unique=FALSE)
-	samples<-data.frame(index=c(1:length(samples)),sample_name=samples)
+	samples<-data.frame(sample_index=c(1:length(samples)),sample_name=samples)
+	#print(samples)
 	dbWriteTable(dbConn,'samples',samples,row.names=F,append=T)
 }
 
