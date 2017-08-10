@@ -204,6 +204,7 @@ loadGenes<-function(fpkmFile,
 	write("Writing geneData table",stderr())
 	#dbWriteTable(dbConn,'geneData',as.data.frame(genemelt[,c(1:2,5,3,4,6)]),row.names=F,append=T)
 	insert_SQL<-'INSERT INTO geneData VALUES(:tracking_id,:sample_name,:fpkm,:conf_hi,:conf_lo,:status)'
+	#write(insert_SQL,stderr())
 	bulk_insert(dbConn,insert_SQL,genemelt[,c(1:2,5,3,4,6)])
 
 	#######
@@ -224,12 +225,14 @@ loadGenes<-function(fpkmFile,
 
 			write("Writing geneExpDiffData table",stderr())
 			diffCols<-c(1,5:14)
-
+			colnames(diff)[colnames(diff)=="log2.fold_change."]<-"log2_fold_change" # Not sure why this is the only place this is screwy...
+			
 			#debugging
 			#write(colnames(diff[,diffCols]),stderr())
 
 			#dbWriteTable(dbConn,'geneExpDiffData',diff[,diffCols],row.names=F,append=T)
-			insert_SQL<-"INSERT INTO geneExpDiffData VALUES(:test_id,:sample_1,:sample_2,:status,:value_1,:value_2,?,:test_stat,:p_value,:q_value,:significant)"
+
+			insert_SQL<-"INSERT INTO geneExpDiffData VALUES(:test_id,:sample_1,:sample_2,:status,:value_1,:value_2,:log2_fold_change,:test_stat,:p_value,:q_value,:significant)"
 			bulk_insert(dbConn,insert_SQL,diff[,diffCols])
 		}else{
 			write(paste("No records found in", diffFile),stderr())
