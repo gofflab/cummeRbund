@@ -2,8 +2,10 @@ import(methods)
 
 #importFrom(graphics, plot)
 importFrom(plyr, defaults)
+
 importFrom(BiocGenerics, annotation)
-import(S4Vectors)
+#import(S4Vectors)
+
 importFrom(Biobase, featureNames)
 
 exportClasses(CuffSet,

@@ -764,11 +764,13 @@ setMethod("getSig",signature(object="CuffSet"),.getSig)
 	sig$testResult<-0
 	sig$testResult[sig$q_value<=alpha]<-1
 	
+
 	fieldsNeeded<-c(slot(object,level)@idField,'testName','testResult')
 	sig<-sig[,fieldsNeeded]
 	
 	#recast
 	sig.table<-acast(sig,as.formula(paste(slot(object,level)@idField,"~testName")),value='testResult')
+
 	
 	#remove genes that do not reject null in any test
 	sig.table<-sig.table[rowSums(sig.table,na.rm=T)>0,]
